@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APEX — Holly's Dragon Egg · Wireframe Hatch Face</title>
+<!--
+  HOLLY'S DRAGON EGG — WIREFRAME HATCH FACE v1 (Nov 9, 2026).
+  For Holly. The owner's order (Nov 9, 21:48 EST), in his words:
+  "We could do a dragon egg hatch for Holly. Wireframe." So the whole
+  face is WIREFRAME — every shape drawn as linework, nothing filled,
+  nothing rendered solid: a dragon egg built from wireframe shell
+  geometry and scale arcs, in purples and lavenders on a dark violet
+  plate, with a real clock riding above it.
+
+  HER DISCIPLINE, FOLLOWED: purple lettering and purple palette,
+  NEVER pink. Not one pink number appears in the palette block.
+  Colour is CALLED from that block — solid numbers, never washed,
+  no translucent dark over the plate.
+
+  THE HATCH CYCLE: at rest the egg sits still. Observed, it rocks
+  gently. Every tap on the egg is a peck from inside — the egg
+  wobbles and gains a crack. Cracks also creep in slowly with real
+  time (about one stage a day), so the egg hatches for a patient
+  watcher too. Crack stages: 0 whole · 1 first crack · 2 cracks
+  spread · 3 shell lifting · 4 THE HATCH — the shell splits into two
+  wireframe halves, the top tips away, and a small wireframe dragon
+  climbs out: wings unfold rib by rib, tail curls, head looks left
+  then right, and it puffs one tiny wireframe smoke ring.
+
+  AFTER THE HATCH: the hatchling lives on the face — wireframe idle
+  life, wing stretches, tail flicks, an occasional hop. After about
+  an hour hatched, a new small egg fades in beside him, and the
+  cycle can run again. Population discipline: one dragon + one egg,
+  never more. Keep it clean.
+
+  PERSISTENCE — BEST EFFORT, HONESTLY GRADED: hatch progress (crack
+  stage, hatch stamp, cycle count, timestamps) is saved to
+  localStorage under a guard — every read and write inside
+  try/catch; if storage is absent or throws, the face runs fully
+  in-session. Whether the watch wrapper keeps localStorage across
+  launches is UNTESTED: persistence is graded NO MEASURE in the
+  build report and claimed nowhere here.
+
+  Battery V2 law FROM BIRTH: static at REST (one time-true still
+  pass, no loops), spectacle only when OBSERVED (ApexFace hook, the
+  Glass House seed mechanism), 12 s auto-exit, nothing holds the
+  screen on.
+-->
+<style>
+  :root{
+    --void:#07030f;        /* outer dark */
+    --plate:#180a2e;       /* deep violet plate */
+    --plate2:#22103f;      /* plate, second tone */
+    --panel:#10051f;       /* solid read panel */
+    --lav:#b388ff;         /* lavender wire — egg shell */
+    --orchid:#d580ff;      /* orchid wire — cracks, accents */
+    --violet:#a855f7;      /* violet wire — dragon body */
+    --laser:#c084fc;       /* pale laser — digits, highlights */
+    --pale:#e9d5ff;        /* pale lavender — name, lettering */
+    --cream:#f3e8ff;       /* cream-violet lettering */
+    --grape:#7e57c2;       /* deep grape — shell geometry, dim wire */
+    --smoke:#9d8bd0;       /* smoke-ring wire */
+    --dim:#8b7bb8;         /* dim violet — ground line, lamp */
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--void)}
+  body{font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none;user-select:none;cursor:pointer}
+  #face{position:absolute;inset:0;background:var(--plate)}
+  .lbl{position:absolute;width:100%;text-align:center;color:var(--cream);
+    letter-spacing:.22em;font-weight:700}
+  #nameLbl{top:1.6vmin;font-size:3.4vmin;color:var(--pale)}
+  #stateLamp{position:absolute;right:2.6vmin;top:2.0vmin;font-size:2.0vmin;
+    color:var(--dim);letter-spacing:.14em;text-align:right;z-index:4}
+  body.observed #stateLamp{color:var(--laser)}
+  #clockPanel{position:absolute;left:50%;top:6.0vmin;transform:translateX(-50%);
+    background:var(--panel);border:2px solid var(--violet);border-radius:1.6vmin;
+    padding:0.6vmin 4vmin 1vmin;text-align:center;z-index:3}
+  #clock{font-size:10.5vmin;font-weight:800;color:var(--laser);line-height:1;
+    letter-spacing:.04em;font-variant-numeric:tabular-nums}
+  #dateLine{font-size:2.4vmin;color:var(--cream);letter-spacing:.18em;margin-top:0.5vmin}
+  #stageLine{position:absolute;top:22.5vmin;width:100%;text-align:center;
+    font-size:2.6vmin;font-weight:700;letter-spacing:.3em;color:var(--orchid);z-index:3}
+  #nestWrap{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);
+    width:94vmin;height:64vmin;z-index:2}
+  svg{width:100%;height:100%;display:block}
+  #hintLine{position:absolute;bottom:3.0vmin;width:100%;text-align:center;
+    font-size:2.2vmin;letter-spacing:.24em;color:var(--dim);z-index:3}
+  body.observed #hintLine{color:var(--lav)}
+</style>
+</head>
+<body>
+<div id="face">
+  <div id="nameLbl" class="lbl">HOLLY&rsquo;S&nbsp;DRAGON&nbsp;EGG</div>
+  <div id="stateLamp">REST</div>
+  <div id="clockPanel"><div id="clock">--:--</div><div id="dateLine">—</div></div>
+  <div id="stageLine">· THE EGG RESTS ·</div>
+  <div id="nestWrap"><svg id="nestSvg" viewBox="0 0 470 320" aria-label="Holly's wireframe dragon egg, which hatches"></svg></div>
+  <div id="hintLine">TAP THE EGG · SOMETHING IS INSIDE</div>
+</div>
+
+<script>
+"use strict";
+/* Palette in code — the same called colours as the CSS block.
+   Purple family only. No pink, per her discipline. */
+var PAL = { void:"#07030f", plate:"#180a2e", plate2:"#22103f", panel:"#10051f",
+  lav:"#b388ff", orchid:"#d580ff", violet:"#a855f7", laser:"#c084fc",
+  pale:"#e9d5ff", cream:"#f3e8ff", grape:"#7e57c2", smoke:"#9d8bd0", dim:"#8b7bb8" };
+var NS = "http://www.w3.org/2000/svg";
+function el(name, attrs, parent){
+  var n = document.createElementNS(NS, name);
+  for(var k in attrs) n.setAttribute(k, attrs[k]);
+  if(parent) parent.appendChild(n);
+  return n;
+}
+
+/* ---- Persistence: guarded localStorage, best effort -------------------
+   Every touch sits in try/catch. If storage is absent or throws, `store`
+   stays null and the face runs fully in-session. Wrapper persistence
+   across launches is untested — NO MEASURE, claimed nowhere. */
+var SKEY = "holly-dragon-egg-v1";
+var store = null;
+try {
+  var probe = "__holly_egg_probe__";
+  window.localStorage.setItem(probe, "1");
+  window.localStorage.removeItem(probe);
+  store = window.localStorage;
+} catch(e){ store = null; }
+function saveState(){
+  if(!store) return;
+  try {
+    store.setItem(SKEY, JSON.stringify({
+      stage: H.stage, pecks: H.pecks, born: H.born, hatchedAt: H.hatchedAt,
+      cycles: H.cycles, seen: Date.now()
+    }));
+  } catch(e){ /* storage full/blocked: in-session state carries on */ }
+}
+function loadState(){
+  if(!store) return null;
+  try {
+    var raw = store.getItem(SKEY);
+    if(!raw) return null;
+    var s = JSON.parse(raw);
+    if(!s || typeof s.stage !== "number") return null;
+    return s;
+  } catch(e){ return null; }
+}
+
+/* ---- Hatch state --------------------------------------------------------
+   stage 0..3 = crack stages; stage 4 = hatched (the dragon is out).
+   One stage also creeps in per ~20 h of real elapsed time, so a
+   patient egg hatches on time alone in about four days. */
+var HOUR = 3600000;
+var H = { stage: 0, pecks: 0, born: Date.now(), hatchedAt: 0, cycles: 0, seen: Date.now() };
+(function init(){
+  var s = loadState();
+  if(s){
+    H.stage = s.stage; H.pecks = s.pecks || 0;
+    H.born = (typeof s.born === "number") ? s.born : Date.now();
+    H.hatchedAt = s.hatchedAt || 0; H.cycles = s.cycles || 0;
+    H.seen = (typeof s.seen === "number") ? s.seen : Date.now();
+  }
+})();
+function creep(){
+  /* time alone advances the egg: one crack stage per ~20 real hours */
+  if(H.stage >= 4) return;
+  var now = Date.now();
+  var due = Math.floor((now - H.born) / (20 * HOUR));
+  var target = Math.min(3, due);
+  if(target > H.stage){ H.stage = target; saveState(); paintStage(); }
+}
+var STAGE_TEXT = ["· THE EGG RESTS ·", "· A FIRST CRACK ·", "· THE CRACKS SPREAD ·",
+  "· THE SHELL LIFTS ·", "· HATCHED ·"];
+
+var svg = document.getElementById("nestSvg");
+/* ground + nest: wireframe arcs and twig lines, dim grape */
+el("line", {x1:14, y1:288, x2:456, y2:288, stroke:PAL.dim, "stroke-width":2}, svg);
+var nest = el("g", {}, svg);
+el("path", {d:"M120 288 Q 235 258 350 288", fill:"none", stroke:PAL.grape, "stroke-width":2.4}, nest);
+el("path", {d:"M140 288 Q 235 268 330 288", fill:"none", stroke:PAL.grape, "stroke-width":1.8}, nest);
+el("path", {d:"M108 284 L150 292 M362 284 L320 292 M180 292 L196 282 M290 292 L274 282",
+  fill:"none", stroke:PAL.grape, "stroke-width":1.8}, nest);
+
+/* ---- The egg: wireframe shell geometry ----------------------------------
+   Local coords, egg centred at (0,0), built around y from -108 (top)
+   to +88 (bottom). Latitudes, meridian halves, and scale arcs — all
+   stroke, no fill. Crack polylines live in crackGroups[1..3] and are
+   revealed per stage. At the hatch the shell splits: shellTop rotates
+   away, shellBottom stays as the cup the dragon climbs out of. */
+function buildEgg(scale){
+  var root = el("g", {}, svg);
+  var rock = el("g", {}, root);            /* rocking pivot */
+  var top = el("g", {}, rock);             /* shell top half */
+  var bot = el("g", {}, rock);             /* shell bottom half */
+  function shellHalf(parent, upper){
+    var yTop = upper ? -108 : -8, yBot = upper ? -8 : 88;
+    /* silhouette halves */
+    var d = upper
+      ? "M-84 -8 C -86 -58 -56 -100 -24 -106 C 6 -110 40 -102 62 -80 C 82 -60 86 -34 84 -8"
+      : "M-84 -8 C -86 34 -64 72 -30 84 C 4 92 44 86 66 62 C 82 44 86 18 84 -8";
+    el("path", {d:d, fill:"none", stroke:PAL.lav, "stroke-width":2.8}, parent);
+    /* latitudes */
+    var lats = upper ? [-84,-58,-32] : [18,46,70];
+    for(var i=0; i<lats.length; i++){
+      var y = lats[i];
+      var hw = 84 * Math.sqrt(Math.max(0.08, 1 - Math.pow((y+10)/102, 2))) * 0.98;
+      el("path", {d:"M"+(-hw)+" "+y+" Q 0 "+(y+10)+" "+hw+" "+y,
+        fill:"none", stroke:PAL.grape, "stroke-width":1.5}, parent);
+    }
+    /* meridians */
+    var mers = upper ? [-46, 0, 46] : [-46, 0, 46];
+    for(var j=0; j<mers.length; j++){
+      var mx = mers[j];
+      el("path", {d:"M"+mx+" "+yTop+" Q "+(mx*0.82)+" "+((yTop+yBot)/2)+" "+mx+" "+yBot,
+        fill:"none", stroke:PAL.grape, "stroke-width":1.3}, parent);
+    }
+    /* scale arcs: rows of small scallops */
+    var rows = upper ? [-70,-44,-20] : [8,34,58];
+    for(var r=0; r<rows.length; r++){
+      var ry = rows[r];
+      for(var sx=-56; sx<=56; sx+=28){
+        el("path", {d:"M"+(sx-11)+" "+ry+" A 12 9 0 0 1 "+(sx+11)+" "+ry,
+          fill:"none", stroke:PAL.lav, "stroke-width":1.4}, parent);
+      }
+    }
+    /* the jagged split line both halves share at stage >= 3 */
+    if(upper){
+      el("path", {d:"M-84 -8 L-62 -20 L-40 -6 L-18 -19 L4 -7 L26 -20 L48 -8 L66 -18 L84 -8",
+        fill:"none", stroke:PAL.orchid, "stroke-width":2}, parent);
+    } else {
+      el("path", {d:"M-84 -8 L-62 4 L-40 -10 L-18 3 L4 -9 L26 4 L48 -6 L66 2 L84 -8",
+        fill:"none", stroke:PAL.orchid, "stroke-width":2}, parent);
+    }
+  }
+  shellHalf(top, true);
+  shellHalf(bot, false);
+  /* cracks: three groups, revealed as stages advance */
+  var cracks = [null,
+    el("g", {visibility:"hidden"}, rock),
+    el("g", {visibility:"hidden"}, rock),
+    el("g", {visibility:"hidden"}, rock)];
+  el("path", {d:"M6 -96 L-2 -74 L8 -58 L0 -40", fill:"none", stroke:PAL.orchid, "stroke-width":2.2}, cracks[1]);
+  el("path", {d:"M8 -58 L26 -48 M0 -40 L-16 -30", fill:"none", stroke:PAL.orchid, "stroke-width":2}, cracks[2]);
+  el("path", {d:"M-30 -66 L-20 -50 L-30 -34 M40 -70 L32 -52 L42 -38 M-4 -88 L-14 -76",
+    fill:"none", stroke:PAL.orchid, "stroke-width":1.8}, cracks[3]);
+  root.setAttribute("transform", "translate(235 196) scale("+scale+")");
+  return { root:root, rock:rock, top:top, bot:bot, cracks:cracks, wobbleUntil: 0 };
+}
+var egg = buildEgg(1.0);
+var egg2 = null;                            /* the next egg, when it fades in */
+
+/* ---- The dragon: small wireframe hatchling -------------------------------
+   Local coords, standing in the shell cup around y=0. Wings are rib
+   fans that unfold at the hatch and stretch in idle life; the tail
+   curls in segments; the head looks around; one smoke ring puffs
+   from the nostrils after the hatch and now and then thereafter. */
+var dragon = el("g", {visibility:"hidden"}, svg);
+dragon.setAttribute("transform", "translate(235 196)");
+var dBob = el("g", {}, dragon);
+var dTail = el("g", {}, dBob);
+el("path", {d:"M-24 62 C -58 66 -76 48 -70 26 C -66 12 -52 8 -44 16",
+  fill:"none", stroke:PAL.violet, "stroke-width":2.4}, dTail);
+el("path", {d:"M-70 26 L-80 18 M-70 26 L-82 28 M-70 26 L-78 36",
+  fill:"none", stroke:PAL.violet, "stroke-width":1.8}, dTail);   /* tail spade */
+el("path", {d:"M-26 66 C -20 30 -16 -6 -10 -34 C -6 -56 4 -70 16 -72",
+  fill:"none", stroke:PAL.violet, "stroke-width":2.8}, dBob);     /* spine */
+el("path", {d:"M-10 40 L-30 66 M-12 8 L-32 30 M14 -66 L30 -84",
+  fill:"none", stroke:PAL.violet, "stroke-width":2.2}, dBob);     /* legs + arm */
+el("path", {d:"M-30 66 L-38 66 M-32 30 L-40 32 M30 -84 L38 -82",
+  fill:"none", stroke:PAL.violet, "stroke-width":1.8}, dBob);     /* claws */
+function makeWing(side){
+  var w = el("g", {}, dBob);
+  var dir = side; /* -1 left, +1 right */
+  var bx = dir < 0 ? -14 : 10, by = -58;
+  var tipX = bx + dir*64, tipY = by - 34;
+  el("path", {d:"M"+bx+" "+by+" L"+tipX+" "+tipY, fill:"none", stroke:PAL.orchid, "stroke-width":2.2}, w);
+  el("path", {d:"M"+bx+" "+by+" L"+(bx + dir*52)+" "+(by + 6), fill:"none", stroke:PAL.orchid, "stroke-width":1.8}, w);
+  el("path", {d:"M"+bx+" "+by+" Q "+(bx + dir*34)+" "+(by - 26)+" "+tipX+" "+tipY+
+    " M"+tipX+" "+tipY+" Q "+(bx + dir*44)+" "+(by - 2)+" "+(bx + dir*52)+" "+(by + 6),
+    fill:"none", stroke:PAL.lav, "stroke-width":1.4}, w);
+  w.setAttribute("transform-origin", bx+"px "+by+"px");
+  return w;
+}
+var wingL = makeWing(-1), wingR = makeWing(1);
+var dHead = el("g", {}, dBob);
+dHead.setAttribute("transform", "translate(22 -84)");
+el("path", {d:"M-12 -8 C -12 -20 4 -26 16 -20 C 28 -14 30 -2 26 8 L 34 16 C 36 22 30 26 22 25 L -2 22 C -10 20 -12 6 -12 -8 Z",
+  fill:"none", stroke:PAL.violet, "stroke-width":2.6}, dHead);    /* skull + snout */
+el("path", {d:"M-6 -20 L-12 -34 L-2 -26 M10 -24 L8 -40 L18 -28",
+  fill:"none", stroke:PAL.orchid, "stroke-width":2}, dHead);      /* horns */
+el("circle", {cx:8, cy:-6, r:3.4, fill:"none", stroke:PAL.laser, "stroke-width":1.8}, dHead); /* eye ring */
+el("circle", {cx:26, cy:12, r:2, fill:"none", stroke:PAL.lav, "stroke-width":1.6}, dHead);    /* nostril */
+var smoke = el("g", {visibility:"hidden"}, dragon);
+var smokeRing = el("circle", {cx:56, cy:-76, r:5, fill:"none", stroke:PAL.smoke, "stroke-width":1.8}, smoke);
+var fx = { hatchStart: 0, smokeStart: 0, hopStart: 0, nextPuff: 0 };
+
+/* ---- Stage painting ------------------------------------------------------ */
+var stageEl = document.getElementById("stageLine");
+var hintEl = document.getElementById("hintLine");
+function paintStage(){
+  creep();
+  var hatched = H.stage >= 4;
+  egg.cracks.forEach(function(c, i){ if(c) c.setAttribute("visibility", (H.stage >= i && !hatched) ? "visible" : "hidden"); });
+  dragon.setAttribute("visibility", hatched ? "visible" : "hidden");
+  stageEl.textContent = STAGE_TEXT[Math.min(4, H.stage)];
+  hintEl.textContent = hatched ? "A DRAGON · WIREFRAME AND ALIVE" :
+    (H.stage >= 3 ? "TAP · IT IS ALMOST TIME" : "TAP THE EGG · SOMETHING IS INSIDE");
+}
+
+/* ---- Poses -----------------------------------------------------------------
+   Egg observed: gentle rock (sin), a wobble burst after each peck.
+   Hatch sequence (first ~3.4 s after stage 4 begins): shell top tips
+   away and fades, wings unfold 0→1, dragon rises a little, head looks
+   left then right, one smoke ring grows and dissolves.
+   Idle dragon: bob, wing stretch every ~9 s, tail flick, a hop now
+   and then, a smoke puff every ~40 s of observed time. */
+function eggPose(t, now){
+  var hatched = H.stage >= 4;
+  var rockA = Math.sin(t / 1000 * 1.1) * (hatched ? 1.5 : 4);
+  if(now < egg.wobbleUntil) rockA += Math.sin((egg.wobbleUntil - now) / 28) * 6;
+  egg.rock.setAttribute("transform", "rotate("+rockA.toFixed(1)+" 0 88)");
+  if(egg2) egg2.rock.setAttribute("transform", "rotate("+(Math.sin(t / 1000 * 0.9 + 2) * 3).toFixed(1)+" 0 88)");
+  if(!hatched){
+    egg.top.setAttribute("transform", "translate(0 0) rotate(0)");
+    egg.top.removeAttribute("opacity");
+    return;
+  }
+  /* the hatched shell: bottom cup stays, top half tipped beside it */
+  var since = fx.hatchStart ? (now - fx.hatchStart) : 99999;
+  var tip = since < 1200 ? (since / 1200) : 1;
+  egg.top.setAttribute("transform",
+    "translate("+(54 * tip).toFixed(0)+" "+(30 * tip).toFixed(0)+") rotate("+(64 * tip).toFixed(0)+" 0 0)");
+  egg.top.setAttribute("opacity", (1 - 0.35 * tip).toFixed(2));
+  dragonPose(t, now, since);
+}
+function dragonPose(t, now, sinceHatch){
+  var sec = t / 1000;
+  var unfold = sinceHatch < 2200 ? Math.max(0, (sinceHatch - 600) / 1600) : 1;
+  var stretch = 1 + 0.18 * Math.max(0, Math.sin(sec * 0.7)) * (Math.sin(sec * 0.7) > 0.92 ? 1 : 0);
+  var wScale = (0.25 + 0.75 * unfold) * stretch;
+  wingL.setAttribute("transform", "scale("+wScale.toFixed(2)+" 1)");
+  wingR.setAttribute("transform", "scale("+wScale.toFixed(2)+" 1)");
+  var bobY = Math.sin(sec * 1.8) * 2.2;
+  if(fx.hopStart && now - fx.hopStart < 700){
+    var hu = (now - fx.hopStart) / 700;
+    bobY -= Math.sin(hu * Math.PI) * 16;
+  } else if(fx.hopStart && now - fx.hopStart >= 700){ fx.hopStart = 0; }
+  if(!fx.hopStart && Math.random() < 0.002) fx.hopStart = now;   /* a hop, now and then */
+  dBob.setAttribute("transform", "translate(0 "+bobY.toFixed(1)+")");
+  dTail.setAttribute("transform", "rotate("+(Math.sin(sec * 2.3) * 7).toFixed(1)+" -24 62)");
+  /* head looks around: during the hatch, left then right; after, slow scan */
+  var look = 0;
+  if(sinceHatch < 3400) look = sinceHatch < 2000 ? -14 : 12;
+  else look = Math.sin(sec * 0.45) * 12;
+  dHead.setAttribute("transform", "translate(22 -84) rotate("+look.toFixed(1)+" 0 0)");
+  /* smoke: one ring right after the hatch, then a puff every ~40 s */
+  var puffing = false;
+  if(sinceHatch > 2400 && sinceHatch < 4200){ fx.smokeStart = fx.smokeStart || (fx.hatchStart + 2400); puffing = true; }
+  else if(fx.nextPuff && now > fx.nextPuff){ fx.smokeStart = now; fx.nextPuff = now + 40000; puffing = true; }
+  else if(fx.smokeStart && now - fx.smokeStart < 1800){ puffing = true; }
+  if(!fx.nextPuff && sinceHatch >= 4200) fx.nextPuff = now + 40000;
+  if(puffing && fx.smokeStart){
+    var su = (now - fx.smokeStart) / 1800;
+    if(su >= 1){ smoke.setAttribute("visibility", "hidden"); fx.smokeStart = 0; }
+    else {
+      smoke.setAttribute("visibility", "visible");
+      smokeRing.setAttribute("r", (5 + su * 17).toFixed(1));
+      smokeRing.setAttribute("cx", (56 + su * 22).toFixed(0));
+      smokeRing.setAttribute("cy", (-76 - su * 14).toFixed(0));
+      smokeRing.setAttribute("opacity", (1 - su).toFixed(2));
+    }
+  } else smoke.setAttribute("visibility", "hidden");
+}
+
+/* ---- The peck: tapping the egg --------------------------------------------
+   Each tap = one peck from inside: wobble + the next crack. Three
+   pecks carry a stage. At stage 3, three more pecks hatch it. */
+function peck(){
+  if(H.stage >= 4) return;
+  var now = Date.now();
+  egg.wobbleUntil = now + 650;
+  H.pecks += 1;
+  if(H.pecks >= 3){
+    H.pecks = 0;
+    H.stage += 1;
+    if(H.stage >= 4){ H.stage = 4; H.hatchedAt = now; H.cycles += 1; fx.hatchStart = now; }
+  }
+  saveState();
+  paintStage();
+}
+svg.addEventListener("pointerdown", function(e){ e.stopPropagation(); observe("peck"); peck(); });
+
+/* ---- The next egg: after ~1 h hatched, a small egg fades in --------------- */
+function maybeSecondEgg(){
+  if(H.stage < 4 || egg2) return;
+  if(Date.now() - H.hatchedAt < 1 * HOUR) return;
+  egg2 = buildEgg(0.52);
+  egg2.root.setAttribute("transform", "translate(118 224) scale(0.52)");
+  hintEl.textContent = "A NEW EGG · THE CYCLE RUNS AGAIN";
+}
+
+/* ---- Time read ---------------------------------------------------------- */
+var clockEl = document.getElementById("clock"), dateEl = document.getElementById("dateLine");
+var lampEl = document.getElementById("stateLamp");
+var DAYS = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+var MONS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+var lastMinute = -1, paintedOnce = false;
+function paintTime(now){
+  var m = now.getMinutes();
+  if(m === lastMinute && now.getSeconds() !== 0 && lastMinute !== -1 && paintedOnce) return;
+  lastMinute = m; paintedOnce = true;
+  var hh = now.getHours(), h12 = hh % 12; if(h12 === 0) h12 = 12;
+  clockEl.textContent = (h12<10?"0":"")+h12+":"+(m<10?"0":"")+m;
+  dateEl.textContent = DAYS[now.getDay()]+" · "+MONS[now.getMonth()]+" "+now.getDate()+
+    " · "+(hh<12?"AM":"PM");
+}
+
+/* ---- Battery V2 state machine: REST still / OBSERVED spectacle ----------
+   The seed mechanism, mirrored from the Glass House family: ApexFace
+   hook, apex-face-* events, visibility/focus/touch signals, 12 s
+   auto-exit, __governor / __faceRest bench hooks. */
+var REST = "rest", OBSERVED = "observed";
+var state = REST, raf = 0, exitTimer = 0, obsStart = 0;
+var gov = { state:"rest", enters:0, rests:0, lastSignal:"boot" };
+window.__governor = gov;
+window.__faceRest = true;
+window.__egg = H;
+function stillPass(){
+  /* one time-true still pass: egg (or dragon) posed at its true stage,
+     rock at zero, cracks as the stage says. No loop runs at REST. */
+  egg.rock.setAttribute("transform", "rotate(0 0 88)");
+  if(egg2) egg2.rock.setAttribute("transform", "rotate(0 0 88)");
+  if(H.stage >= 4){
+    egg.top.setAttribute("transform", "translate(54 30) rotate(64 0 0)");
+    egg.top.setAttribute("opacity", "0.65");
+    wingL.setAttribute("transform", "scale(1 1)");
+    wingR.setAttribute("transform", "scale(1 1)");
+    dBob.setAttribute("transform", "translate(0 0)");
+    smoke.setAttribute("visibility", "hidden");
+  } else {
+    egg.top.setAttribute("transform", "translate(0 0) rotate(0)");
+    egg.top.removeAttribute("opacity");
+  }
+  paintStage();
+}
+function obsFrame(){
+  if(state !== OBSERVED) return;
+  var now = Date.now();
+  eggPose(now - obsStart, now);
+  raf = requestAnimationFrame(obsFrame);
+}
+function setLamp(){ lampEl.textContent = (state === OBSERVED) ? "OBSERVED" : "REST"; }
+function observe(sig){
+  if(state !== OBSERVED){
+    state = OBSERVED; obsStart = Date.now();
+    gov.state = "observed"; gov.enters++; window.__faceRest = false;
+    document.body.classList.add("observed"); setLamp();
+    creep(); maybeSecondEgg(); paintStage();
+    raf = requestAnimationFrame(obsFrame);
+  }
+  gov.lastSignal = sig || "signal";
+  if(exitTimer) clearTimeout(exitTimer);
+  exitTimer = setTimeout(function(){ rest(); }, 12000);   /* 12 s auto-exit */
+}
+function rest(sig){
+  if(state === REST){ gov.lastSignal = sig || gov.lastSignal; stillPass(); return; }
+  state = REST;
+  gov.state = "rest"; gov.rests++; gov.lastSignal = sig || "signal";
+  window.__faceRest = true;
+  if(raf) cancelAnimationFrame(raf); raf = 0;
+  if(exitTimer){ clearTimeout(exitTimer); exitTimer = 0; }
+  document.body.classList.remove("observed"); setLamp();
+  saveState();
+  stillPass();                            /* one time-true still pass */
+}
+function toggle(){ (state === OBSERVED) ? rest("toggle") : observe("toggle"); }
+window.ApexFace = {
+  observe: function(){ observe("container-observe"); },
+  rest:    function(){ rest("container-rest"); },
+  toggle:  toggle,
+  state:   function(){ return state; }
+};
+/* The container may also command by DOM events on window (v2 contract),
+   navigate with ?face=observed|rest, or rely on visibility/focus/touch:
+   visible + focused counts as observation; hidden always rests; a press
+   on the glass is an observation signal, never a toggle-off. */
+window.addEventListener("apex-face-observe", function(){ observe("event-observe"); });
+window.addEventListener("apex-face-rest", function(){ rest("event-rest"); });
+window.addEventListener("focus", function(){ if(!document.hidden) observe("focus"); });
+window.addEventListener("blur", function(){ rest("blur"); });
+window.addEventListener("pointerdown", function(){ observe("pointer"); }, true);
+window.addEventListener("touchstart", function(){ observe("touch"); }, true);
+window.addEventListener("keydown", function(){ observe("key"); }, true);
+document.addEventListener("visibilitychange", function(){
+  if(document.hidden){ rest("hidden"); }
+  else if(document.hasFocus && document.hasFocus()){ observe("visible"); }
+  else { paintTime(new Date()); stillPass(); }
+});
+
+/* ---- Boot: REST still pass; clock checks each second, repaints on the
+   minute roll only. Crack creep is computed on wake/minute from real
+   timestamps. No loop runs at REST. No wake-lock of any kind — the
+   system sleep governs this face. ------------------------------- */
+if(H.stage >= 4) fx.hatchStart = 0;       /* hatched in a past session: no replay theatre */
+creep();
+paintTime(new Date());
+paintStage();
+stillPass(); setLamp();
+saveState();
+if(/[?&]face=observed/.test(location.search)) observe();
+setInterval(function(){
+  var now = new Date();
+  if(now.getMinutes() !== lastMinute){ paintTime(now); creep(); maybeSecondEgg(); if(state === REST) stillPass(); }
+}, 1000);
+</script>
+</body>
+</html>

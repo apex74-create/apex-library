@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Apex Lunar Lander</title>
+<!--
+  APEX LUNAR LANDER — one self-contained offline game file. No dependencies.
+  House games program, built 2026-11-24 (Nov 23 scope). Vanilla JS + canvas.
+  Real physics: gravity, thrust along the craft axis, mass that falls as fuel
+  burns, torque-driven rotation. Staged flight: launch the full stack, blow
+  the bottom stage, land just the pod — in a crevice on the mountainside.
+  1979 vector wireframe: line-drawn terrain and craft, Asteroids / Atari
+  Lunar Lander lineage. Altitude reads off the craft's own shadow.
+-->
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { width:100%; height:100%; background:#000; overflow:hidden;
+    font-family:"Courier New",Courier,monospace; color:#cfe8d8;
+    touch-action:none; user-select:none; -webkit-user-select:none; }
+  #stage { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:100vw; height:56.25vw; max-width:177.78vh; max-height:100vh; background:#000; }
+  #cv { position:absolute; top:0; right:0; bottom:0; left:0; width:100%; height:100%; display:block; }
+  /* flight buttons — the primary control surface. Vector plate styling:
+     phosphor outline, dark glass, inverted flash while engaged. */
+  #btns { position:absolute; top:0; right:0; bottom:0; left:0; display:none; pointer-events:none; }
+  .btn { position:absolute; bottom:3%; pointer-events:auto; cursor:pointer;
+    border:2px solid #57ff8a; background:rgba(2,12,6,0.55); color:#cfe8d8;
+    font-family:"Courier New",Courier,monospace; text-align:center;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    letter-spacing:1px; touch-action:none; }
+  .btn .arw { font-size:3.6vmin; line-height:1; color:#57ff8a; }
+  .btn .lab { font-size:2.3vmin; font-weight:bold; margin-top:0.4vmin; }
+  .btn .sub { font-size:1.5vmin; color:#8aa896; margin-top:0.4vmin; }
+  .btn.on { background:#57ff8a; color:#02120a; }
+  .btn.on .arw, .btn.on .sub { color:#02120a; }
+  #btnL { left:2.5%;  width:19%; height:14%; }
+  #btnR { left:23.5%; width:19%; height:14%; }
+  #btnT { right:2.5%; width:24%; height:18%; border-color:#ffb35c; }
+  #btnT .arw { color:#ffb35c; }
+  #btnT.on { background:#ffb35c; }
+  #btnT.on .arw, #btnT.on .sub { color:#02120a; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv" width="960" height="540"></canvas>
+  <div id="btns">
+    <div class="btn" id="btnL"><span class="arw">◀</span><span class="lab">ROTATE LEFT</span><span class="sub">HOLD TO TURN</span></div>
+    <div class="btn" id="btnR"><span class="arw">▶</span><span class="lab">ROTATE RIGHT</span><span class="sub">HOLD TO TURN</span></div>
+    <div class="btn" id="btnT"><span class="arw">▲</span><span class="lab">THRUST</span><span class="sub">TAP = PULSE · HOLD = BURN</span></div>
+  </div>
+</div>
+<script>
+"use strict";
+/* ============================== WORLD ============================== */
+var W = 3400;                       // world width, metres
+var G = 1.62;                       // lunar gravity, m/s^2 — real number, no fake float
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+var rng = mulberry32(1979);         // fixed seed: the course is a designed course, same every load
+
+/* Terrain: hand-authored control points (x, y-up metres). The mountain rises
+   to the right; THE CREVICE is a notch cut into the mountainside at x 2366–2392
+   with a flat pad at its floor, y 438. Pads are flat segments in the profile. */
+var RAW = [
+  [0,70],[110,70],[165,70],[260,86],[420,120],[600,150],[800,205],[980,235],
+  [1150,262],[1185,262],[1330,300],[1520,360],[1700,430],[1880,492],[2030,540],
+  [2160,566],[2260,548],[2320,505],[2352,452],[2366,438],[2392,438],[2406,452],
+  [2438,508],[2520,560],[2660,520],[2820,430],[2960,300],[3050,196],[3088,196],
+  [3200,150],[3400,110]
+];
+var PADS = [
+  { x1:110,  x2:165,  y:70,  name:"BASE",       pts:100  },
+  { x1:1150, x2:1185, y:262, name:"SHELF",      pts:250  },
+  { x1:2366, x2:2392, y:438, name:"THE CREVICE",pts:1000 },
+  { x1:3050, x2:3088, y:196, name:"FAR SIDE",   pts:150  }
+];
+function isPadPoint(x){ for (var i=0;i<PADS.length;i++) if (x>=PADS[i].x1-1 && x<=PADS[i].x2+1) return true; return false; }
+var TERRAIN = RAW.map(function(p){ return [p[0], isPadPoint(p[0]) ? p[1] : p[1] + (rng()*6-3)]; });
+function terrainH(x){
+  if (x<=0) return TERRAIN[0][1];
+  if (x>=W) return TERRAIN[TERRAIN.length-1][1];
+  for (var i=0;i<TERRAIN.length-1;i++){
+    var a=TERRAIN[i], b=TERRAIN[i+1];
+    if (x>=a[0] && x<=b[0]){ var t=(x-a[0])/(b[0]-a[0]); return a[1]+(b[1]-a[1])*t; }
+  }
+  return TERRAIN[TERRAIN.length-1][1];
+}
+function padAt(x){ for (var i=0;i<PADS.length;i++) if (x>=PADS[i].x1 && x<=PADS[i].x2) return PADS[i]; return null; }
+
+/* ============================== SCENERY ==============================
+   Pure ornament — none of this touches terrainH, the pads, or collision.
+   Surface detail sits on the course line; the ridge plates stand behind
+   it. Both run on their own seeds so the course rng sequence is untouched. */
+var decoRng = mulberry32(1957);
+function overlapsPad(x1, x2){ for (var i=0;i<PADS.length;i++) if (x2 >= PADS[i].x1-14 && x1 <= PADS[i].x2+14) return true; return false; }
+var CRATERS = [], ROCKS = [];
+for (var cxx = 70; cxx < W-60; cxx += 110 + decoRng()*170){
+  var crad = 9 + decoRng()*17;
+  if (!overlapsPad(cxx-crad, cxx+crad)) CRATERS.push({ x:cxx, r:crad, d:2.5 + decoRng()*3.5 });
+}
+for (var rxx = 36; rxx < W-24; rxx += 30 + decoRng()*54){
+  if (!overlapsPad(rxx-3, rxx+3)) ROCKS.push({ x:rxx, s:1.6 + decoRng()*2.6 });
+}
+/* Parallax ridge plates: jagged Mars-character skylines — near-vertical
+   cliff faces, ravine drop-ins, crater rims — generated once, drawn behind
+   the course, each sliding at its own rate like a glass plate. */
+function makeRidge(seed, width, base, amp){
+  var r = mulberry32(seed), pts = [[0, base]], x = 0, y = base;
+  function cl(v){ return Math.max(base - amp*0.75, Math.min(base + amp, v)); }
+  while (x < width - 60){
+    var roll = r();
+    if (roll < 0.16){            /* cliff: a near-vertical face */
+      var nx = x + 5 + r()*12; y = cl(y + (r() < 0.5 ? -1 : 1) * amp * (0.55 + r()*0.6)); pts.push([nx, y]); x = nx;
+    } else if (roll < 0.30){     /* ravine: sharp drop-in, flat floor, climb out */
+      var d = amp * (0.4 + r()*0.35), fw = 16 + r()*34, bx = x + 12 + r()*18;
+      pts.push([bx, y]); pts.push([bx + 9, cl(y - d)]); pts.push([bx + 9 + fw, cl(y - d)]); pts.push([bx + 18 + fw, y]); x = bx + 18 + fw;
+    } else if (roll < 0.44){     /* crater: rim up, bowl, rim up */
+      var rim = 4 + r()*7, kw = 22 + r()*28, kx = x + 18 + r()*24;
+      pts.push([kx, cl(y + rim)]); pts.push([kx + kw/2, cl(y - rim*0.8)]); pts.push([kx + kw, cl(y + rim)]); pts.push([kx + kw + 14, y]); x = kx + kw + 14;
+    } else {                     /* ordinary jagged slope */
+      var sx = x + 30 + r()*80; y = cl(y + (r() - 0.46) * amp * 0.6); pts.push([sx, y]); x = sx;
+    }
+  }
+  pts.push([width, base]);       /* ends at start height: the plate wraps seamlessly */
+  return pts;
+}
+var RIDGES = [
+  { pts:makeRidge(101, 2400, 215, 150), w:2400, f:0.18, fy:0.25, s:0.62, col:"#33523f", glow:"rgba(70,120,90,0.10)",  glowW:5,   lineW:1.1 },
+  { pts:makeRidge(202, 2800, 175, 215), w:2800, f:0.42, fy:0.40, s:0.80, col:"#4f7d60", glow:"rgba(95,165,120,0.13)", glowW:5.5, lineW:1.2 },
+  { pts:makeRidge(303, 3200, 135, 265), w:3200, f:0.68, fy:0.55, s:0.92, col:"#6fae86", glow:"rgba(125,205,155,0.17)", glowW:6,   lineW:1.3 }
+];
+function drawRidge(L){
+  var x0 = cam.x*L.f - 540/(cam.s*L.s), x1 = cam.x*L.f + 540/(cam.s*L.s);
+  var k0 = Math.floor(x0/L.w), k1 = Math.floor(x1/L.w);
+  for (var pass = 0; pass < 2; pass++){           /* pass 0 = the glow, pass 1 = the edge */
+    ctx.strokeStyle = pass === 0 ? L.glow : L.col;
+    ctx.lineWidth = pass === 0 ? L.glowW : L.lineW;
+    ctx.beginPath();
+    for (var k = k0; k <= k1; k++){
+      for (var i = 0; i < L.pts.length; i++){
+        var wx = L.pts[i][0] + k*L.w, wy = L.pts[i][1];
+        var sp = [ (wx - cam.x*L.f)*cam.s*L.s + 480, 300 - (wy - cam.y*L.fy)*cam.s*L.s ];
+        if (k === k0 && i === 0) ctx.moveTo(sp[0], sp[1]); else ctx.lineTo(sp[0], sp[1]);
+      }
+    }
+    ctx.stroke();
+  }
+}
+
+/* ============================== CRAFT ============================== */
+/* Masses are honest: wet mass = dry + fuel aboard, and it falls as fuel burns.
+   Thrust acts along the craft axis only. Rotation is torque with damping. */
+var POD   = { dry:380, fuelCap:240, thrust:3000, burn:2.2 };   // kg, kg, N, kg/s at full thrust
+var STAGE = { dry:900, fuelCap:900, thrust:9000, burn:6.0 };
+var craft, stageBody, debris, flight;
+function resetFlight(){
+  craft = {
+    x:137, y:0, vx:0, vy:0, angle:0, va:0,
+    podFuel:POD.fuelCap, stageFuel:STAGE.fuelCap, attached:true,
+    thrusting:false, alive:true
+  };
+  craft.y = 70 + craftFeetDrop();          // sitting on the BASE pad
+  stageBody = null; debris = []; endStamp = 0;
+  flight = { t:0, flown:false, airborne:false, sep:false, result:null, pad:null, cause:"", score:0, tvx:0, tvy:0 };
+}
+function craftFeetDrop(){ return craft && craft.attached ? 19.5 : 6; }   // origin = pod centre
+function craftMass(){ return POD.dry + craft.podFuel + (craft.attached ? STAGE.dry + craft.stageFuel : 0); }
+function craftPoints(){
+  /* silhouette points in local coords (origin pod centre, y up).
+     feet = allowed contact; body = any contact is a crash. */
+  var pts;
+  if (craft.attached){
+    pts = { feet:[[-7.5,-19.5],[7.5,-19.5]],
+            body:[[-4.5,6],[4.5,6],[-5.5,-5],[5.5,-5],[-5.5,-18],[5.5,-18]] };
+  } else {
+    pts = { feet:[[-6,-6],[6,-6]],
+            body:[[-4.5,6],[4.5,6],[-4.5,-3],[4.5,-3]] };
+  }
+  return pts;
+}
+function rot(px,py,a){ var c=Math.cos(a), s=Math.sin(a); return [px*c-py*s, px*s+py*c]; }
+function worldPt(p){ var r=rot(p[0],p[1],craft.angle); return [craft.x+r[0], craft.y+r[1]]; }
+function radarAlt(){ var f=worldPt(craftPoints().feet[0]); return Math.min(f[1], worldPt(craftPoints().feet[1])[1]) - terrainH(craft.x); }
+
+function stepPhysics(dt){
+  if (!craft.alive) return;
+  flight.t += dt;
+  var mass = craftMass();
+  var fx = 0, fy = -G*mass;
+  craft.thrusting = false;
+  if (input.thrust){
+    var fuel = craft.attached ? craft.stageFuel : craft.podFuel;
+    if (fuel > 0){
+      var T = craft.attached ? STAGE.thrust : POD.thrust;
+      fx += -Math.sin(craft.angle)*T; fy += Math.cos(craft.angle)*T;
+      var burn = (craft.attached ? STAGE.burn : POD.burn)*dt;
+      if (craft.attached) craft.stageFuel = Math.max(0, craft.stageFuel-burn);
+      else craft.podFuel = Math.max(0, craft.podFuel-burn);
+      craft.thrusting = true; flight.flown = true;
+    }
+  }
+  craft.vx += (fx/mass)*dt; craft.vy += (fy/mass)*dt;
+  /* torque: held key applies angular accel; light damping keeps it honest but flyable */
+  var ta = 0;
+  if (input.left)  ta += 1.9;
+  if (input.right) ta -= 1.9;
+  craft.va += (ta - craft.va*0.9)*dt;
+  craft.angle += craft.va*dt;
+  craft.x += craft.vx*dt; craft.y += craft.vy*dt;
+  if (radarAlt() > 2) flight.airborne = true;   // touchdown is only judged after a real liftoff
+  if (craft.x < 12){ craft.x = 12; craft.vx = Math.max(0, craft.vx); }
+  if (craft.x > W-12){ craft.x = W-12; craft.vx = Math.min(0, craft.vx); }
+
+  /* the blown stage is a body of its own: it falls, tumbles, and wrecks */
+  if (stageBody && !stageBody.dead){
+    stageBody.vy -= G*dt; stageBody.x += stageBody.vx*dt; stageBody.y += stageBody.vy*dt;
+    stageBody.angle += stageBody.va*dt;
+    if (stageBody.y - 9 <= terrainH(stageBody.x)){
+      stageBody.dead = true; boom(stageBody.x, terrainH(stageBody.x), 10, "#9fb8a8");
+    }
+  }
+  for (var i=debris.length-1;i>=0;i--){
+    var d=debris[i]; d.vy -= G*dt; d.x += d.vx*dt; d.y += d.vy*dt; d.a += d.va*dt; d.life -= dt;
+    if (d.y <= terrainH(d.x)){ d.y = terrainH(d.x); d.vy = 0; d.vx *= 0.6; d.va = 0; }
+    if (d.life <= 0) debris.splice(i,1);
+  }
+  checkContact();
+}
+function separate(){
+  if (!craft.attached || !craft.alive) return;
+  craft.attached = false; flight.sep = true;
+  stageBody = { x:craft.x, y:craft.y-13, vx:craft.vx*0.92, vy:craft.vy-1.5, angle:craft.angle, va:(rng()-0.5)*1.6, dead:false };
+  boom(craft.x, craft.y-8, 6, "#e8e4d8");
+}
+function boom(x,y,n,col){
+  for (var i=0;i<n;i++){
+    var a = rng()*Math.PI*2, sp = 6+rng()*26;
+    debris.push({ x:x, y:y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp+6, a:a, va:(rng()-0.5)*7, life:1.4+rng()*1.6, col:col });
+  }
+}
+function endFlight(result, pad, cause){
+  craft.alive = false;
+  endStamp = performance.now();
+  endDelay = (result === "LANDED") ? 900 : 1600;   /* the boom (or the touchdown) is seen first; the verdict box follows */
+  flight.result = result; flight.pad = pad; flight.cause = cause || "";
+  flight.tvx = craft.vx; flight.tvy = craft.vy;
+  if (result === "LANDED"){
+    var soft = Math.max(0,(3-Math.abs(craft.vy))/3)*150 + Math.max(0,(2-Math.abs(craft.vx))/2)*100;
+    var fuelBonus = Math.round((craft.podFuel/POD.fuelCap)*200);
+    flight.score = Math.round(pad.pts + soft + fuelBonus);
+  } else { flight.score = 0; boom(craft.x, craft.y, 26, "#ffd9a0"); }
+  recordFlight();
+  state = (result === "LANDED") ? "landed" : "crashed";
+}
+function checkContact(){
+  var pts = craftPoints(), i, p, h;
+  /* feet first: a feet-first touch on a pad inside the limits is a landing */
+  var feet = pts.feet.map(worldPt);
+  var lowFoot = Math.min(feet[0][1], feet[1][1]);
+  var footX = feet[0][1] <= feet[1][1] ? feet[0][0] : feet[1][0];
+  if (lowFoot <= terrainH(footX)+0.05 && flight.airborne){
+    var pad = padAt(craft.x);
+    if (!pad) return endFlight("CRASHED", null, "ROUGH TERRAIN");
+    if (Math.abs(craft.vy) > 3)  return endFlight("CRASHED", pad, "CAME IN TOO FAST — VERTICAL " + Math.abs(craft.vy).toFixed(1) + " M/S");
+    if (Math.abs(craft.vx) > 2)  return endFlight("CRASHED", pad, "TOO MUCH DRIFT — " + Math.abs(craft.vx).toFixed(1) + " M/S SIDEWAYS");
+    if (Math.abs(craft.angle) > 0.14) return endFlight("CRASHED", pad, "CAME IN TILTED");
+    if (Math.abs(feet[0][1]-feet[1][1]) > 1.6) return endFlight("CRASHED", pad, "ONE LEG FIRST — SHE TIPPED");
+    return endFlight("LANDED", pad, "");
+  }
+  /* any body point into the ground is a crash — this is what convicts the
+     full stack in the crevice: its body corners meet the notch walls. */
+  for (i=0;i<pts.body.length;i++){
+    p = worldPt(pts.body[i]); h = terrainH(p[0]);
+    if (p[1] < h-0.02 && flight.airborne) return endFlight("CRASHED", null, "HIT THE TERRAIN");
+  }
+  /* resting before first thrust is not a crash */
+  if (!flight.flown && lowFoot <= terrainH(footX)+0.05){ craft.y += (terrainH(footX)+0.05-lowFoot); craft.vy = Math.max(0,craft.vy); }
+}
+
+/* ============================== INPUT ============================== */
+var input = { left:false, right:false, thrust:false };
+var state = "title";                 // title | stats | fly | landed | crashed
+var endStamp = 0, endDelay = 0;      // when the flight ended, and how long the verdict box waits
+var menuSel = 0, paused = false;
+var KEYS = { ArrowLeft:"left", KeyA:"left", ArrowRight:"right", KeyD:"right", ArrowUp:"thrust", KeyW:"thrust" };
+document.addEventListener("keydown", function(e){
+  if (KEYS[e.code] !== undefined){ input[KEYS[e.code]] = true; e.preventDefault(); }
+  if (e.code === "KeyX" && state === "fly") separate();
+  if (e.code === "KeyP" && state === "fly") paused = !paused;
+  if (state === "title"){
+    if (e.code === "ArrowUp" || e.code === "ArrowDown") menuSel = 1-menuSel;
+    if (e.code === "Enter" || e.code === "Space"){ if (menuSel === 0){ resetFlight(); state = "fly"; } else state = "stats"; }
+    if (e.code === "KeyS") state = "stats";
+  } else if (state === "stats"){
+    if (e.code === "Escape" || e.code === "Enter" || e.code === "KeyS") state = "title";
+    if (e.code === "KeyC"){ stats = freshStats(); saveStats(); }
+  } else if ((state === "landed" || state === "crashed")){
+    if (e.code === "Enter" || e.code === "KeyR" || e.code === "Space"){ resetFlight(); state = "fly"; }
+    if (e.code === "KeyS") state = "statsFromEnd";
+    if (e.code === "Escape") state = "title";
+  } else if (state === "statsFromEnd"){
+    if (e.code === "Escape" || e.code === "Enter" || e.code === "KeyS") state = flight.result === "LANDED" ? "landed" : "crashed";
+  }
+});
+document.addEventListener("keyup", function(e){ if (KEYS[e.code] !== undefined){ input[KEYS[e.code]] = false; e.preventDefault(); } });
+/* On-screen buttons are the primary flight controls. ROTATE is hold-to-turn
+   both ways — release and the torque stops (held-input model, stock damping).
+   THRUST is an engage/disengage fire plate built for flutter-tapping: every
+   tap is a pulse of the engine, a hold is a burn, and the plate flashes
+   while the engine is engaged. The canvas itself takes only menu taps and,
+   in flight, the top-right SEP corner tap. Keyboard works exactly as before. */
+var cv = document.getElementById("cv");
+var btnsEl = document.getElementById("btns");
+function bindBtn(id, prop){
+  var el = document.getElementById(id);
+  el.addEventListener("pointerdown", function(e){
+    e.preventDefault();
+    try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    input[prop] = true; el.classList.add("on");
+  });
+  function off(){ input[prop] = false; el.classList.remove("on"); }
+  el.addEventListener("pointerup", off);
+  el.addEventListener("pointercancel", off);
+  el.addEventListener("lostpointercapture", off);
+  el.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+}
+bindBtn("btnL", "left"); bindBtn("btnR", "right"); bindBtn("btnT", "thrust");
+function canvasTap(t){
+  var r = cv.getBoundingClientRect(), x = (t.clientX-r.left)/r.width, y = (t.clientY-r.top)/r.height;
+  if (state === "fly"){ if (x > 0.8 && y < 0.22) separate(); return; }
+  if (state === "title"){ if (y < 0.62){ resetFlight(); state = "fly"; } else state = "stats"; }
+  else if (state === "stats") state = "title";
+  else if (state === "landed" || state === "crashed"){ resetFlight(); state = "fly"; }
+  else if (state === "statsFromEnd") state = flight.result === "LANDED" ? "landed" : "crashed";
+}
+cv.addEventListener("touchstart", function(e){ e.preventDefault(); canvasTap(e.changedTouches[0]); }, {passive:false});
+cv.addEventListener("touchend",   function(e){ e.preventDefault(); }, {passive:false});
+cv.addEventListener("mousedown",  function(e){ canvasTap(e); });
+
+/* ============================== STATS ============================== */
+/* The board records real play only — every row is a flight that happened. */
+var SKEY = "apexLunarLanderStats.v1";
+function freshStats(){ return { flights:[] }; }
+var stats = freshStats();
+try { var raw = localStorage.getItem(SKEY); if (raw) stats = JSON.parse(raw); } catch(e){}
+function saveStats(){ try { localStorage.setItem(SKEY, JSON.stringify(stats)); } catch(e){} }
+function recordFlight(){
+  stats.flights.push({
+    n: stats.flights.length+1,
+    result: flight.result,
+    pad: flight.pad ? flight.pad.name : "—",
+    sep: flight.sep,
+    time: Math.round(flight.t*10)/10,
+    podFuelPct: Math.round((craft.podFuel/POD.fuelCap)*100),
+    tvx: Math.round(flight.tvx*10)/10, tvy: Math.round(flight.tvy*10)/10,
+    score: flight.score, cause: flight.cause
+  });
+  if (stats.flights.length > 200) stats.flights = stats.flights.slice(-200);
+  saveStats();
+}
+function totals(){
+  var t = { n:stats.flights.length, landed:0, crashed:0, crevice:0, score:0, best:0 };
+  stats.flights.forEach(function(f){
+    if (f.result === "LANDED"){ t.landed++; if (f.pad === "THE CREVICE") t.crevice++; }
+    else t.crashed++;
+    t.score += f.score; if (f.score > t.best) t.best = f.score;
+  });
+  return t;
+}
+
+/* ============================== RENDER ============================== */
+var ctx = cv.getContext("2d");
+var cam = { x:137, y:200, s:0.7 };   /* flight opens a tick closer than the first build */
+function line(x1,y1,x2,y2){ ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+function txt(s,x,y,size,align,col){
+  ctx.font = size + "px 'Courier New',monospace"; ctx.textAlign = align || "left";
+  ctx.fillStyle = col || "#cfe8d8"; ctx.fillText(s,x,y);
+}
+function poly(pts, close){ ctx.beginPath(); pts.forEach(function(p,i){ if(i===0) ctx.moveTo(p[0],p[1]); else ctx.lineTo(p[0],p[1]); }); if (close) ctx.closePath(); ctx.stroke(); }
+function toScreen(wx,wy){ return [ (wx-cam.x)*cam.s + 480, 300 - (wy-cam.y)*cam.s ]; }
+
+function drawCraft(cx, cy, a, attached, flame){
+  var pts = attached
+    ? { pod:[[-4.5,6],[4.5,6],[4.5,-3],[2,-5],[-2,-5],[-4.5,-3]],
+        stage:[[-5.5,-5],[5.5,-5],[5.5,-16],[3.2,-19.5],[-3.2,-19.5],[-5.5,-16]],
+        finL:[[-5.5,-14],[-7.5,-19.5],[-5.5,-19.5]], finR:[[5.5,-14],[7.5,-19.5],[5.5,-19.5]],
+        bell:[[-2,-16],[2,-16],[2.8,-19],[ -2.8,-19]] }
+    : { pod:[[-4.5,6],[4.5,6],[4.5,-3],[2,-5],[-2,-5],[-4.5,-3]],
+        legL:[[-3.5,-4],[-6,-6]], legR:[[3.5,-4],[6,-6]], footL:[[-7,-6],[-5,-6]], footR:[[5,-6],[7,-6]] };
+  function P(list){ return list.map(function(p){ var r=rot(p[0],p[1],a); var s=toScreen(cx+r[0], cy+r[1]); return s; }); }
+  ctx.strokeStyle = "#e8f4ec"; ctx.lineWidth = 1.4;
+  poly(P(pts.pod), true);
+  if (attached){ poly(P(pts.stage), true); poly(P(pts.finL), true); poly(P(pts.finR), true); poly(P(pts.bell), false); }
+  else { poly(P(pts.legL), false); poly(P(pts.legR), false); poly(P(pts.footL), false); poly(P(pts.footR), false); }
+  var win = rot(0,2.5,a), ws = toScreen(cx+win[0], cy+win[1]);
+  ctx.strokeRect(ws[0]-3*cam.s*0.4, ws[1]-2*cam.s*0.4, 6*cam.s*0.4, 4*cam.s*0.4);
+  if (flame){
+    var fl = 8 + rng()*7, base = attached ? -19 : -5;
+    var b1 = rot(-2,base,a), b2 = rot(2,base,a), tip = rot(0,base-fl,a);
+    ctx.strokeStyle = "#ffb35c";
+    poly([toScreen(cx+b1[0],cy+b1[1]), toScreen(cx+tip[0],cy+tip[1]), toScreen(cx+b2[0],cy+b2[1])], false);
+  }
+}
+function drawWorld(){
+  ctx.fillStyle = "#000"; ctx.fillRect(0,0,960,540);
+  /* stars — fixed field, seeded, they do not move with the camera */
+  ctx.fillStyle = "#5a6e62";
+  var sr = mulberry32(42);
+  for (var i=0;i<110;i++){ var sx=sr()*960, sy=sr()*400; ctx.fillRect(sx,sy,1.4,1.4); }
+  /* parallax ridge plates behind the course — glass layers sliding at
+     their own rates, edge glow on every ridge line, nearer = stronger */
+  RIDGES.forEach(drawRidge);
+  /* the course plate: a solid silhouette over the scenery, then its own
+     ridge line with a subtle edge glow, so the stack reads as one world */
+  var tx0 = Math.max(0, cam.x-520/cam.s), tx1 = Math.min(W, cam.x+520/cam.s);
+  ctx.beginPath();
+  for (var x=tx0; x<=tx1; x+=6){
+    var s = toScreen(x, terrainH(x)); if (x===tx0) ctx.moveTo(s[0],s[1]); else ctx.lineTo(s[0],s[1]);
+  }
+  var sEnd = toScreen(tx1, terrainH(tx1)), sBeg = toScreen(tx0, terrainH(tx0));
+  ctx.lineTo(sEnd[0], 560); ctx.lineTo(sBeg[0], 560); ctx.closePath();
+  ctx.fillStyle = "#000"; ctx.fill();
+  ctx.beginPath();
+  for (var x2=tx0; x2<=tx1; x2+=6){
+    var s2 = toScreen(x2, terrainH(x2)); if (x2===tx0) ctx.moveTo(s2[0],s2[1]); else ctx.lineTo(s2[0],s2[1]);
+  }
+  ctx.strokeStyle = "rgba(140,255,180,0.10)"; ctx.lineWidth = 4.2; ctx.stroke();
+  ctx.strokeStyle = "#e8f4ec"; ctx.lineWidth = 1.6; ctx.stroke();
+  /* surface detail on the course line — craters, rocks, hatch shading and
+     a contour echo. Ornament only: the collision line never moves. */
+  var vx0 = tx0, vx1 = tx1;
+  ctx.strokeStyle = "rgba(120,175,140,0.28)"; ctx.lineWidth = 1; ctx.beginPath();
+  for (var qx = vx0; qx <= vx1; qx += 10){
+    var qs = toScreen(qx, terrainH(qx)-13); if (qx === vx0) ctx.moveTo(qs[0], qs[1]); else ctx.lineTo(qs[0], qs[1]);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(120,175,140,0.35)"; ctx.lineWidth = 1;
+  for (var hx = Math.floor(vx0/24)*24; hx <= vx1; hx += 24){
+    if (hx % 72 === 0) continue;
+    var ha = toScreen(hx, terrainH(hx)-0.5), hb = toScreen(hx+5, terrainH(hx)-8);
+    line(ha[0], ha[1], hb[0], hb[1]);
+  }
+  ctx.strokeStyle = "rgba(200,235,215,0.6)"; ctx.lineWidth = 1.1;
+  CRATERS.forEach(function(c){
+    if (c.x + c.r < vx0 || c.x - c.r > vx1) return;
+    ctx.beginPath();
+    for (var t = 0; t <= 1.001; t += 0.1){
+      var wx = c.x - c.r + 2*c.r*t, wy = terrainH(wx) - Math.sin(Math.PI*t)*c.d, ws = toScreen(wx, wy);
+      if (t === 0) ctx.moveTo(ws[0], ws[1]); else ctx.lineTo(ws[0], ws[1]);
+    }
+    ctx.stroke();
+    var r1 = toScreen(c.x - c.r, terrainH(c.x - c.r)), r2 = toScreen(c.x + c.r, terrainH(c.x + c.r));
+    line(r1[0], r1[1], r1[0]-3, r1[1]-3); line(r2[0], r2[1], r2[0]+3, r2[1]-3);
+  });
+  ctx.strokeStyle = "rgba(200,235,215,0.75)"; ctx.lineWidth = 1.1;
+  ROCKS.forEach(function(rk){
+    if (rk.x < vx0 || rk.x > vx1) return;
+    var rb = toScreen(rk.x, terrainH(rk.x)), rp = toScreen(rk.x, terrainH(rk.x) + rk.s);
+    line(rb[0]-rk.s, rb[1], rp[0], rp[1]); line(rp[0], rp[1], rb[0]+rk.s, rb[1]);
+  });
+  /* pads: double line + name, the crevice pad burns green */
+  PADS.forEach(function(p){
+    ctx.strokeStyle = p.name === "THE CREVICE" ? "#57ff8a" : "#e8f4ec"; ctx.lineWidth = 2;
+    var a = toScreen(p.x1,p.y), b = toScreen(p.x2,p.y);
+    line(a[0],a[1]-2,b[0],b[1]-2);
+    var mid = toScreen((p.x1+p.x2)/2, p.y);
+    txt(p.name, mid[0], mid[1]+16, 11, "center", p.name === "THE CREVICE" ? "#57ff8a" : "#8aa896");
+  });
+  /* wreck of the blown stage */
+  if (stageBody){
+    ctx.save(); ctx.strokeStyle = "#9fb8a8"; ctx.lineWidth = 1.2;
+    var sb = stageBody, sp = [[-5.5,4],[5.5,4],[5.5,-6],[-5.5,-6]].map(function(p){ var r=rot(p[0],p[1],sb.angle); return toScreen(sb.x+r[0], sb.y+r[1]); });
+    poly(sp, true); ctx.restore();
+  }
+  /* the shadow — the craft's mark on the ground. Altitude reads off it. */
+  if (craft.alive || state === "fly"){
+    var shY = terrainH(craft.x), sh = toScreen(craft.x, shY), c0 = toScreen(craft.x, craft.y);
+    ctx.strokeStyle = "rgba(160,220,180,0.35)"; ctx.lineWidth = 1;
+    ctx.setLineDash([3,5]); line(c0[0], c0[1], sh[0], sh[1]); ctx.setLineDash([]);
+    ctx.strokeStyle = "#57ff8a"; ctx.lineWidth = 2.4;
+    line(sh[0]-8, sh[1]-1, sh[0]+8, sh[1]-1);
+    line(sh[0]-8, sh[1]-1, sh[0]-4, sh[1]-5); line(sh[0]+8, sh[1]-1, sh[0]+4, sh[1]-5);
+  }
+  if (craft.alive) drawCraft(craft.x, craft.y, craft.angle, craft.attached, craft.thrusting);
+  else if (state === "landed") drawCraft(craft.x, craft.y, craft.angle, craft.attached, false);
+  /* debris */
+  debris.forEach(function(d){
+    var s = toScreen(d.x, d.y); ctx.strokeStyle = d.col; ctx.lineWidth = 1.4;
+    line(s[0]-4*Math.cos(d.a), s[1]+4*Math.sin(d.a), s[0]+4*Math.cos(d.a), s[1]-4*Math.sin(d.a));
+  });
+}
+function fmt(n,d){ return (n<0?"":"+") + n.toFixed(d); }
+function drawHUD(){
+  var alt = Math.max(0, radarAlt());
+  txt("FUEL  STAGE " + (craft.attached ? Math.round(craft.stageFuel) + " KG" : "— GONE —") + "   POD " + Math.round(craft.podFuel) + " KG", 18, 30, 15);
+  txt("ALT (OFF YOUR SHADOW)  " + alt.toFixed(1) + " M", 18, 54, 15);
+  txt("V/S " + fmt(craft.vy,1) + " M/S    H/S " + fmt(craft.vx,1) + " M/S", 18, 78, 15);
+  txt("TIME " + flight.t.toFixed(1) + " S", 942, 30, 15, "right");
+  txt(craft.attached ? "STACK: FULL — X BLOWS THE STAGE" : "STACK: POD ONLY", 942, 54, 15, "right", craft.attached ? "#cfe8d8" : "#57ff8a");
+  if (craft.attached && craft.stageFuel <= 0) txt("STAGE DRY — BLOW IT (X)", 480, 30, 15, "center", "#ffb35c");
+  if (!craft.attached && craft.podFuel <= POD.fuelCap*0.25 && craft.alive) txt("POD FUEL LOW", 480, 30, 15, "center", "#ffb35c");
+  if (craft.alive && alt < 60 && craft.vy < -4) txt("RATE!", 480, 54, 17, "center", "#ff7a5c");
+  if (paused) txt("PAUSED", 480, 290, 30, "center");
+}
+function panel(w,h){ ctx.fillStyle = "rgba(4,12,8,0.88)"; ctx.fillRect(480-w/2, 270-h/2, w, h); ctx.strokeStyle = "#57ff8a"; ctx.lineWidth = 1.4; ctx.strokeRect(480-w/2, 270-h/2, w, h); }
+function drawTitle(){
+  drawWorld();
+  txt("APEX", 480, 128, 30, "center", "#57ff8a");
+  txt("LUNAR LANDER", 480, 178, 52, "center");
+  txt("REAL PHYSICS · STAGED POD · ONE CREVICE ON THE MOUNTAIN", 480, 214, 14, "center", "#8aa896");
+  txt((menuSel===0?"▶ ":"  ") + "FLY", 480, 300, 24, "center", menuSel===0 ? "#57ff8a" : "#cfe8d8");
+  txt((menuSel===1?"▶ ":"  ") + "STATISTICS BOARD", 480, 340, 24, "center", menuSel===1 ? "#57ff8a" : "#cfe8d8");
+  txt("BUTTONS OR KEYS — ◀ ▶ ROTATE (HOLD) · ▲ THRUST: TAP = PULSE, HOLD = BURN · X SEP", 480, 452, 13, "center", "#8aa896");
+  txt("LAND SOFT: DOWN ≤ 3 M/S · DRIFT ≤ 2 M/S · LEVEL · BOTH LEGS", 480, 476, 13, "center", "#8aa896");
+  txt("THE CREVICE PAYS 1000 — THE FULL STACK DOES NOT FIT IT", 480, 500, 13, "center", "#8aa896");
+}
+function drawEnd(){
+  drawWorld(); drawHUD(); panel(560, 240);
+  if (state === "landed"){
+    txt("LANDED — " + flight.pad.name, 480, 218, 28, "center", "#57ff8a");
+    txt("PAD " + flight.pad.pts + " · TOUCHDOWN " + Math.abs(flight.tvy).toFixed(1) + " DOWN / " + Math.abs(flight.tvx).toFixed(1) + " SIDE", 480, 262, 15, "center");
+    txt("POD FUEL LEFT " + Math.round((craft.podFuel/POD.fuelCap)*100) + "% · TIME " + flight.t.toFixed(1) + " S", 480, 288, 15, "center");
+    txt("SCORE  " + flight.score, 480, 330, 30, "center");
+  } else {
+    txt("CRASHED", 480, 218, 34, "center", "#ff7a5c");
+    txt(flight.cause || "SHE CAME APART", 480, 262, 15, "center");
+    txt("TIME " + flight.t.toFixed(1) + " S · SCORE 0", 480, 292, 15, "center");
+  }
+  txt("ENTER — NEXT FLIGHT · S — BOARD · ESC — TITLE", 480, 368, 14, "center", "#8aa896");
+}
+function drawStats(backState){
+  ctx.fillStyle = "#000"; ctx.fillRect(0,0,960,540);
+  txt("STATISTICS BOARD", 480, 54, 30, "center", "#57ff8a");
+  var t = totals();
+  txt("FLIGHTS " + t.n + " · LANDED " + t.landed + " · CRASHED " + t.crashed + " · CREVICE LANDINGS " + t.crevice, 480, 92, 15, "center");
+  txt("TOTAL SCORE " + t.score + " · BEST FLIGHT " + t.best, 480, 116, 15, "center");
+  txt("#    RESULT   PAD          SEP  TIME    POD FUEL  TOUCHDOWN V/H     SCORE", 90, 158, 13, "left", "#8aa896");
+  var rows = stats.flights.slice(-11);
+  rows.forEach(function(f,i){
+    var y = 186 + i*26;
+    var s = (f.n+"").padEnd(5) + f.result.padEnd(9) + f.pad.padEnd(13) + (f.sep?"YES":"—").padEnd(5) +
+            (f.time+" S").padEnd(8) + (f.podFuelPct+"%").padEnd(10) +
+            (Math.abs(f.tvy).toFixed(1)+" / "+Math.abs(f.tvx).toFixed(1)).padEnd(18) + f.score;
+    txt(s, 90, y, 14, "left", f.result === "LANDED" ? "#cfe8d8" : "#ff9a7a");
+  });
+  if (t.n === 0) txt("NO FLIGHTS YET — THE BOARD FILLS FROM REAL PLAY ONLY", 480, 240, 15, "center", "#8aa896");
+  txt("ESC — BACK · C — CLEAR THE BOARD", 480, 512, 13, "center", "#8aa896");
+}
+
+/* ============================== LOOP ============================== */
+var last = 0, acc = 0;
+function frame(ts){
+  requestAnimationFrame(frame);
+  if (!last) last = ts;
+  var dt = Math.min(0.1, (ts-last)/1000); last = ts;
+  if (state === "fly" && !paused){
+    acc += dt;
+    var h = 1/120;
+    while (acc > h){ stepPhysics(h); acc -= h; if (!craft.alive){ acc = 0; break; } }
+  }
+  /* camera: follows the craft, closes in as the shadow altitude shrinks */
+  var targetS = 0.7, altNow = (state === "fly" || state === "landed" || state === "crashed") ? Math.max(0, radarAlt()) : 300;
+  if (altNow < 140) targetS = 0.7 + (140-altNow)/140*1.35;
+  cam.s += (targetS-cam.s)*Math.min(1, dt*3);
+  cam.x += (craft.x-cam.x)*Math.min(1, dt*4);
+  cam.y += ((craft.y+30)-cam.y)*Math.min(1, dt*4);
+  cam.x = Math.max(480/cam.s - 60, Math.min(W-480/cam.s + 60, cam.x));
+  cam.y = Math.max(120, cam.y);
+
+  btnsEl.style.display = (state === "fly") ? "block" : "none";
+  if (state === "title") drawTitle();
+  else if (state === "stats" || state === "statsFromEnd") drawStats();
+  else { drawWorld(); drawHUD();
+    if ((state === "landed" || state === "crashed") && performance.now() - endStamp >= endDelay) drawEnd(); }
+}
+resetFlight();
+requestAnimationFrame(frame);
+
+/* bench hook: the CDP driver reads real state, never a mock */
+window.LL = {
+  snapshot: function(){
+    return { state:state, x:craft.x, y:craft.y, vx:craft.vx, vy:craft.vy, angle:craft.angle,
+      attached:craft.attached, stageFuel:craft.stageFuel, podFuel:craft.podFuel,
+      radarAlt:Math.max(0,radarAlt()), mass:craftMass(), alive:craft.alive,
+      result:flight.result, pad:flight.pad ? flight.pad.name : null, cause:flight.cause,
+      score:flight.score, t:flight.t, stageBody: stageBody ? { y:stageBody.y, dead:stageBody.dead } : null,
+      totals:totals(), flights:stats.flights.length };
+  },
+  terrainH: terrainH, pads: PADS,
+  start: function(){ resetFlight(); state = "fly"; },
+  showStats: function(){ state = "stats"; },
+  showTitle: function(){ state = "title"; }
+};
+</script>
+</body>
+</html>

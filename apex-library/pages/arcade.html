@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apex Arcade</title>
+<link rel="icon" href="data:,">
+<style>
+  /* The Apex Arcade — the Door's game shelf. One file, zero
+     scripts, zero external resources. Drawn in the door's own
+     register: deep ground, glass plates stacked largest-first,
+     gold accents. Every plate is one big press target — this
+     page is worked by a touchscreen and a Joy-Con cursor. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #04060d;
+    color: #ffffff;
+    font-family: Arial, Helvetica, sans-serif;
+    padding: 18px;
+  }
+  .door-name {
+    font-size: 20px;
+    letter-spacing: 3px;
+    color: #ffd54a;
+    padding: 6px 2px 4px 2px;
+  }
+  .back {
+    display: inline-block;
+    font-size: 17px;
+    color: #9fc3ff;
+    text-decoration: none;
+    padding: 10px 2px 14px 2px;
+  }
+  a.plate {
+    display: block;
+    text-decoration: none;
+    color: #ffffff;
+    background: #0d1526;
+    border: 1px solid #22304d;
+    border-top: 1px solid #3d5a8a;
+    border-radius: 10px;
+    padding: 26px;
+    margin-bottom: 16px;
+  }
+  .plate .big {
+    display: block;
+    font-weight: bold;
+    line-height: 1.1;
+    font-size: 36px;
+  }
+  .plate .small {
+    display: block;
+    margin-top: 8px;
+    line-height: 1.35;
+    font-size: 19px;
+    color: #cccccc;
+  }
+  .plate .press {
+    display: block;
+    margin-top: 14px;
+    font-size: 19px;
+    font-weight: bold;
+    color: #ffd54a;
+    letter-spacing: 1px;
+  }
+  /* Largest plate first: the arcade's own first game is the hero. */
+  .hero { padding: 34px 26px; }
+  .hero .big   { font-size: 46px; }
+  .hero .small { font-size: 20px; }
+  .foot {
+    font-size: 16px;
+    color: #cccccc;
+    line-height: 1.45;
+    padding: 4px 2px 10px 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="door-name">APEX ARCADE</div>
+<a class="back" href="/">&larr; BACK TO THE DOOR</a>
+
+<a class="plate hero" href="/games/brickwall.html">
+  <span class="big">APEX BRICKWALL</span>
+  <span class="small">A paddle, a ball, and a wall of bricks. Smash
+  every brick before the ball gets past you &mdash; clear the wall
+  and the next one is faster. Three balls a game.</span>
+  <span class="press">PLAY</span>
+</a>
+
+<a class="plate" href="/games/lunar-lander.html">
+  <span class="big">LUNAR LANDER</span>
+  <span class="small">Fly the stack down to the pad. Real gravity,
+  real thrust, and fuel that burns off as you fly &mdash; set her
+  down gentle, or scatter her across the grey.</span>
+  <span class="press">PLAY</span>
+</a>
+
+<p class="foot">Every game on this shelf was made in the house.
+Scores and bests are kept on your device &mdash; the door keeps
+nothing about you. More games land on this shelf as the house
+builds them.</p>
+
+</body>
+</html>
