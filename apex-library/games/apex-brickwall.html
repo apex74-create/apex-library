@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apex Brickwall</title>
+<link rel="icon" href="data:,">
+<style>
+  /* Apex Brickwall — a house-original paddle-and-blocks game in
+     the breaker genre. One file, vanilla JS + canvas, no external
+     resources. Drawn in the door's own register: deep ground,
+     glass panel, gold accents. Big press targets throughout —
+     this page is worked by a touchscreen and a Joy-Con cursor.
+     The paddle follows the pointer (touch drag or cursor); no
+     keyboard is required. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #04060d;
+    color: #ffffff;
+    font-family: Arial, Helvetica, sans-serif;
+    padding: 18px;
+  }
+  .door-name {
+    font-size: 20px;
+    letter-spacing: 3px;
+    color: #ffd54a;
+    padding: 6px 2px 4px 2px;
+  }
+  .back {
+    display: inline-block;
+    font-size: 17px;
+    color: #9fc3ff;
+    text-decoration: none;
+    padding: 10px 2px 14px 2px;
+  }
+  .glass {
+    background: #0d1526;
+    border: 1px solid #22304d;
+    border-top: 1px solid #3d5a8a;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .hud {
+    font-size: 20px;
+    letter-spacing: 1px;
+    color: #ffffff;
+    margin-bottom: 12px;
+  }
+  .hud .lab { color: #9fc3ff; font-size: 15px; letter-spacing: 2px; }
+  .hud .cell { display: inline-block; margin-right: 26px; }
+  .hud .gold { color: #ffd54a; }
+  #stage { position: relative; }
+  #field {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #05070f;
+    border-radius: 6px;
+    touch-action: none;
+  }
+  #overlay {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background: #05070f;
+    border-radius: 6px;
+    text-align: center;
+    padding-top: 15%;
+  }
+  #bigWords {
+    font-size: 44px;
+    font-weight: bold;
+    line-height: 1.15;
+    color: #ffffff;
+    padding: 0 20px;
+  }
+  #subWords {
+    margin-top: 12px;
+    font-size: 20px;
+    color: #cccccc;
+    line-height: 1.4;
+    padding: 0 30px;
+  }
+  #actionBtn {
+    margin-top: 26px;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 26px;
+    font-weight: bold;
+    color: #ffffff;
+    background: #1e6b1e;
+    border: none;
+    border-radius: 10px;
+    min-height: 76px;
+    padding: 0 44px;
+    cursor: pointer;
+  }
+  #status {
+    margin-top: 12px;
+    font-size: 18px;
+    color: #ffd54a;
+    letter-spacing: 1px;
+    min-height: 22px;
+  }
+  .howto {
+    font-size: 17px;
+    color: #cccccc;
+    line-height: 1.5;
+    padding: 2px 2px 8px 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="door-name">APEX BRICKWALL</div>
+<a class="back" href="/arcade">&larr; BACK TO THE ARCADE</a>
+
+<div class="glass">
+  <div class="hud">
+    <span class="cell"><span class="lab">SCORE</span> <span id="hudScore" class="gold">0</span></span>
+    <span class="cell"><span class="lab">BEST</span> <span id="hudBest">0</span></span>
+    <span class="cell"><span class="lab">BALLS</span> <span id="hudLives">3</span></span>
+    <span class="cell"><span class="lab">WALL</span> <span id="hudLevel">1</span></span>
+  </div>
+  <div id="stage">
+    <canvas id="field" width="800" height="600"></canvas>
+    <div id="overlay">
+      <div id="bigWords">APEX BRICKWALL</div>
+      <div id="subWords">A paddle, a ball, and a wall of bricks.
+      Smash every brick &mdash; don&rsquo;t let the ball past you.</div>
+      <button id="actionBtn" type="button">PLAY</button>
+    </div>
+  </div>
+  <div id="status">PRESS PLAY TO START</div>
+</div>
+
+<p class="howto">Move the paddle with your finger or the cursor &mdash;
+it follows you. Tap the field to launch the ball. Every brick is worth
+10, clearing a wall pays 100, and the next wall is faster. You get
+three balls. Your best score is kept on this device &mdash; the door
+keeps nothing.</p>
+
+<script>
+(function () {
+  var W = 800, H = 600;
+  var canvas = document.getElementById('field');
+  var ctx = canvas.getContext('2d');
+  var overlay = document.getElementById('overlay');
+  var bigWords = document.getElementById('bigWords');
+  var subWords = document.getElementById('subWords');
+  var actionBtn = document.getElementById('actionBtn');
+  var statusEl = document.getElementById('status');
+  var hudScore = document.getElementById('hudScore');
+  var hudBest = document.getElementById('hudBest');
+  var hudLives = document.getElementById('hudLives');
+  var hudLevel = document.getElementById('hudLevel');
+
+  var PADDLE_W = 116, PADDLE_H = 16, PADDLE_Y = H - 38;
+  var BALL_R = 9;
+  var COLS = 10, ROWS = 6;
+  var BRICK_W = 72, BRICK_H = 24, BRICK_GAP = 6;
+  var FIELD_W = COLS * BRICK_W + (COLS - 1) * BRICK_GAP;
+  var BRICK_LEFT = (W - FIELD_W) / 2, BRICK_TOP = 84;
+  var ROW_COLORS = ['#ffd54a', '#37e0ff', '#7dff5a',
+                    '#ff4fd8', '#b48cff', '#ff8a3c'];
+
+  var phase = 'start'; // start | ready | play | clear | over
+  var score = 0, lives = 3, level = 1, bricksBroken = 0;
+  var paddleX = W / 2;
+  var ball = { x: W / 2, y: PADDLE_Y - BALL_R, vx: 0, vy: 0 };
+  var bricks = [];
+
+  var best = 0;
+  try {
+    best = parseInt(window.localStorage.getItem('apexBrickwallBest') || '0', 10) || 0;
+  } catch (e) { best = 0; }
+
+  function saveBest() {
+    if (score > best) {
+      best = score;
+      try { window.localStorage.setItem('apexBrickwallBest', String(best)); }
+      catch (e) { /* the device said no; the best lives in this page */ }
+    }
+  }
+
+  function speed() {
+    var s = 330 * Math.pow(1.12, level - 1);
+    return s > 640 ? 640 : s;
+  }
+
+  function buildWall() {
+    bricks = [];
+    for (var r = 0; r < ROWS; r++) {
+      for (var c = 0; c < COLS; c++) {
+        bricks.push({
+          x: BRICK_LEFT + c * (BRICK_W + BRICK_GAP),
+          y: BRICK_TOP + r * (BRICK_H + BRICK_GAP),
+          row: r, alive: true
+        });
+      }
+    }
+    bricksBroken = 0;
+  }
+
+  function bricksLeft() {
+    var n = 0;
+    for (var i = 0; i < bricks.length; i++) { if (bricks[i].alive) { n++; } }
+    return n;
+  }
+
+  function resetBall() {
+    ball.x = paddleX;
+    ball.y = PADDLE_Y - BALL_R;
+    ball.vx = 0; ball.vy = 0;
+    phase = 'ready';
+  }
+
+  function setStatus(words) { statusEl.textContent = words; }
+
+  function syncHud() {
+    hudScore.textContent = String(score);
+    hudBest.textContent = String(best);
+    hudLives.textContent = String(lives);
+    hudLevel.textContent = String(level);
+  }
+
+  function showOverlay(big, sub, btn) {
+    bigWords.textContent = big;
+    subWords.innerHTML = sub;
+    actionBtn.textContent = btn;
+    overlay.style.display = 'block';
+  }
+
+  function hideOverlay() { overlay.style.display = 'none'; }
+
+  function startGame() {
+    score = 0; lives = 3; level = 1;
+    buildWall();
+    paddleX = W / 2;
+    resetBall();
+    hideOverlay();
+    syncHud();
+    setStatus('TAP THE FIELD TO LAUNCH THE BALL');
+  }
+
+  function nextWall() {
+    level++;
+    buildWall();
+    resetBall();
+    hideOverlay();
+    syncHud();
+    setStatus('WALL ' + level + ' \u2014 TAP THE FIELD TO LAUNCH');
+  }
+
+  function launch() {
+    if (phase !== 'ready') { return; }
+    var sp = speed();
+    var tilt = (Math.random() * 30 - 15) * Math.PI / 180;
+    ball.vx = sp * Math.sin(tilt);
+    ball.vy = -sp * Math.cos(tilt);
+    phase = 'play';
+    setStatus('');
+  }
+
+  function ballLost() {
+    lives--;
+    syncHud();
+    if (lives > 0) {
+      resetBall();
+      setStatus('BALL LOST \u2014 ' + lives + (lives === 1 ? ' BALL' : ' BALLS') +
+                ' LEFT. TAP TO LAUNCH');
+    } else {
+      saveBest();
+      phase = 'over';
+      syncHud();
+      showOverlay('GAME OVER',
+        'You scored ' + score + '. Your best is ' + best + '.',
+        'PLAY AGAIN');
+      setStatus('GAME OVER');
+    }
+  }
+
+  function wallCleared() {
+    score += 100;
+    saveBest();
+    phase = 'clear';
+    syncHud();
+    showOverlay('WALL CLEARED',
+      'Wall ' + level + ' is down &mdash; 100 bonus points. ' +
+      'The next wall is faster.',
+      'NEXT WALL');
+    setStatus('WALL CLEARED');
+  }
+
+  // ---- physics ----------------------------------------------------
+  function step(dt) {
+    if (phase !== 'play') { return; }
+    var prevX = ball.x, prevY = ball.y;
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+
+    // side and top walls
+    if (ball.x < BALL_R) { ball.x = BALL_R; ball.vx = Math.abs(ball.vx); }
+    if (ball.x > W - BALL_R) { ball.x = W - BALL_R; ball.vx = -Math.abs(ball.vx); }
+    if (ball.y < BALL_R) { ball.y = BALL_R; ball.vy = Math.abs(ball.vy); }
+
+    // the floor is a loss
+    if (ball.y - BALL_R > H) { ballLost(); return; }
+
+    // paddle: only while the ball falls onto it
+    if (ball.vy > 0 &&
+        prevY + BALL_R <= PADDLE_Y + 4 &&
+        ball.y + BALL_R >= PADDLE_Y &&
+        ball.x >= paddleX - PADDLE_W / 2 - BALL_R &&
+        ball.x <= paddleX + PADDLE_W / 2 + BALL_R) {
+      var off = (ball.x - paddleX) / (PADDLE_W / 2);
+      if (off < -1) { off = -1; }
+      if (off > 1) { off = 1; }
+      var sp = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+      var ang = off * (Math.PI / 3); // up to 60 degrees off straight up
+      ball.vx = sp * Math.sin(ang);
+      ball.vy = -sp * Math.cos(ang);
+      ball.y = PADDLE_Y - BALL_R;
+    }
+
+    // bricks: the first live brick the ball touches breaks
+    for (var i = 0; i < bricks.length; i++) {
+      var b = bricks[i];
+      if (!b.alive) { continue; }
+      var nx = Math.max(b.x, Math.min(ball.x, b.x + BRICK_W));
+      var ny = Math.max(b.y, Math.min(ball.y, b.y + BRICK_H));
+      var dx = ball.x - nx, dy = ball.y - ny;
+      if (dx * dx + dy * dy <= BALL_R * BALL_R) {
+        b.alive = false;
+        bricksBroken++;
+        score += 10;
+        // bounce off the face the ball came from
+        if (prevY + BALL_R <= b.y || prevY - BALL_R >= b.y + BRICK_H) {
+          ball.vy = -ball.vy;
+        } else if (prevX + BALL_R <= b.x || prevX - BALL_R >= b.x + BRICK_W) {
+          ball.vx = -ball.vx;
+        } else {
+          ball.vy = -ball.vy;
+        }
+        syncHud();
+        break;
+      }
+    }
+
+    // never let the ball settle into a flat sideways drift
+    var sp2 = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+    if (sp2 > 0 && Math.abs(ball.vy) < sp2 * 0.25) {
+      ball.vy = (ball.vy < 0 ? -1 : 1) * sp2 * 0.25;
+      var keep = Math.sqrt(Math.max(0, sp2 * sp2 - ball.vy * ball.vy));
+      ball.vx = (ball.vx < 0 ? -1 : 1) * keep;
+    }
+
+    if (bricksLeft() === 0) { wallCleared(); }
+  }
+
+  // ---- drawing ------------------------------------------------------
+  function draw() {
+    ctx.fillStyle = '#05070f';
+    ctx.fillRect(0, 0, W, H);
+
+    for (var i = 0; i < bricks.length; i++) {
+      var b = bricks[i];
+      if (!b.alive) { continue; }
+      ctx.fillStyle = ROW_COLORS[b.row];
+      ctx.fillRect(b.x, b.y, BRICK_W, BRICK_H);
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.fillRect(b.x, b.y + BRICK_H - 6, BRICK_W, 6);
+    }
+
+    // the paddle
+    ctx.fillStyle = '#ffd54a';
+    ctx.fillRect(paddleX - PADDLE_W / 2, PADDLE_Y, PADDLE_W, PADDLE_H);
+    ctx.fillStyle = '#04060d';
+    ctx.fillRect(paddleX - 3, PADDLE_Y + 4, 6, PADDLE_H - 8);
+
+    // the ball
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, BALL_R, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+  }
+
+  var lastTs = 0;
+  function frame(ts) {
+    requestAnimationFrame(frame);
+    var dt = lastTs ? (ts - lastTs) / 1000 : 0;
+    lastTs = ts;
+    if (dt > 1 / 30) { dt = 1 / 30; }
+    if (phase === 'ready') {
+      ball.x = paddleX;
+      ball.y = PADDLE_Y - BALL_R;
+    }
+    step(dt);
+    draw();
+  }
+
+  // ---- input: pointer, touch, cursor — no keyboard needed -----------
+  function movePaddle(clientX) {
+    var rect = canvas.getBoundingClientRect();
+    if (!rect.width) { return; }
+    var x = (clientX - rect.left) * (W / rect.width);
+    if (x < PADDLE_W / 2) { x = PADDLE_W / 2; }
+    if (x > W - PADDLE_W / 2) { x = W - PADDLE_W / 2; }
+    paddleX = x;
+  }
+
+  if (window.PointerEvent) {
+    canvas.addEventListener('pointermove', function (e) { movePaddle(e.clientX); }, false);
+    canvas.addEventListener('pointerdown', function (e) { movePaddle(e.clientX); launch(); }, false);
+  }
+  canvas.addEventListener('mousemove', function (e) { movePaddle(e.clientX); }, false);
+  canvas.addEventListener('mousedown', function () { launch(); }, false);
+  canvas.addEventListener('touchmove', function (e) {
+    e.preventDefault();
+    if (e.touches && e.touches.length) { movePaddle(e.touches[0].clientX); }
+  }, false);
+  canvas.addEventListener('touchstart', function (e) {
+    if (e.touches && e.touches.length) { movePaddle(e.touches[0].clientX); }
+    launch();
+  }, false);
+
+  actionBtn.onclick = function () {
+    if (phase === 'start' || phase === 'over') { startGame(); }
+    else if (phase === 'clear') { nextWall(); }
+  };
+
+  // A read-only window on the game, for the bench (and for anyone
+  // who wants to see the state in plain numbers).
+  window.ApexBrickwall = {
+    state: function () {
+      return {
+        phase: phase, score: score, best: best, lives: lives,
+        level: level, bricksLeft: bricksLeft(), bricksBroken: bricksBroken,
+        paddleX: paddleX,
+        ballX: ball.x, ballY: ball.y, ballVX: ball.vx, ballVY: ball.vy
+      };
+    }
+  };
+
+  buildWall();
+  syncHud();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

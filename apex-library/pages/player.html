@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apex Music</title>
+<link rel="icon" href="data:,">
+<style>
+  /* The player plate's room. Dark glass in the PSP era's spirit:
+     deep blue-black ground, solid glass panels, gold accents like
+     the door's own name. No external resources, no frameworks.
+     Big press targets throughout — this page is worked by a
+     touchscreen and a Joy-Con cursor, not a mouse. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #04060d;
+    color: #ffffff;
+    font-family: Arial, Helvetica, sans-serif;
+    padding: 18px;
+  }
+  .door-name {
+    font-size: 20px;
+    letter-spacing: 3px;
+    color: #ffd54a;
+    padding: 6px 2px 4px 2px;
+  }
+  .back {
+    display: inline-block;
+    font-size: 17px;
+    color: #9fc3ff;
+    text-decoration: none;
+    padding: 10px 2px 14px 2px;
+  }
+  .glass {
+    background: #0d1526;
+    border: 1px solid #22304d;
+    border-top: 1px solid #3d5a8a;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  #trackTitle {
+    font-size: 34px;
+    font-weight: bold;
+    line-height: 1.15;
+    min-height: 40px;
+  }
+  #status {
+    margin-top: 8px;
+    font-size: 18px;
+    color: #ffd54a;
+    letter-spacing: 1px;
+  }
+  #viz {
+    display: block;
+    width: 100%;
+    height: 220px;
+    background: #05070f;
+    border-radius: 6px;
+  }
+  #vizNote {
+    display: none;
+    margin-top: 10px;
+    font-size: 16px;
+    color: #cccccc;
+    line-height: 1.4;
+  }
+  .transport {
+    margin-top: 16px;
+  }
+  .transport button {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 24px;
+    font-weight: bold;
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    height: 76px;
+    padding: 0 28px;
+    margin-right: 12px;
+    cursor: pointer;
+  }
+  #prevBtn, #nextBtn { background: #14497f; min-width: 130px; }
+  #playBtn { background: #1e6b1e; min-width: 190px; }
+  .seekrow { margin-top: 18px; }
+  #seekBar {
+    height: 34px;
+    background: #22304d;
+    border-radius: 8px;
+    position: relative;
+    cursor: pointer;
+  }
+  #seekFill {
+    height: 100%;
+    width: 0%;
+    background: #ffd54a;
+    border-radius: 8px;
+  }
+  .times {
+    margin-top: 8px;
+    font-size: 18px;
+    color: #cccccc;
+  }
+  .times .right { float: right; }
+  .list-head {
+    font-size: 20px;
+    letter-spacing: 3px;
+    color: #ffd54a;
+    padding: 2px 2px 12px 2px;
+  }
+  .track {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 21px;
+    color: #ffffff;
+    background: #0d1526;
+    border: 1px solid #22304d;
+    border-radius: 10px;
+    min-height: 62px;
+    padding: 16px 18px;
+    margin-bottom: 10px;
+    cursor: pointer;
+  }
+  .track .num { color: #9fc3ff; margin-right: 12px; }
+  .track.now {
+    border-color: #ffd54a;
+    color: #ffd54a;
+  }
+  .track.now .num { color: #ffd54a; }
+  .empty {
+    font-size: 19px;
+    color: #cccccc;
+    line-height: 1.45;
+    padding: 6px 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="door-name">APEX MUSIC</div>
+<a class="back" href="/">&larr; BACK TO THE DOOR</a>
+
+<div class="glass">
+  <div id="trackTitle">No track picked</div>
+  <div id="status">LOADING THE LIBRARY&hellip;</div>
+  <canvas id="viz" style="margin-top:14px;"></canvas>
+  <div id="vizNote">The visualizer rides the browser&rsquo;s audio
+  graph, and this browser didn&rsquo;t offer one. The music still
+  plays &mdash; the ribbons rest.</div>
+  <div class="transport">
+    <button id="prevBtn" type="button">|&larr; PREV</button>
+    <button id="playBtn" type="button">PLAY</button>
+    <button id="nextBtn" type="button">NEXT &rarr;|</button>
+  </div>
+  <div class="seekrow">
+    <div id="seekBar"><div id="seekFill"></div></div>
+    <div class="times"><span id="tCur">0:00</span><span class="right" id="tDur">0:00</span></div>
+  </div>
+</div>
+
+<div class="list-head">YOUR LIBRARY</div>
+<div id="list"></div>
+
+<audio id="audio" preload="metadata"></audio>
+
+<script>
+(function () {
+  var audio = document.getElementById('audio');
+  var titleEl = document.getElementById('trackTitle');
+  var statusEl = document.getElementById('status');
+  var listEl = document.getElementById('list');
+  var playBtn = document.getElementById('playBtn');
+  var seekBar = document.getElementById('seekBar');
+  var seekFill = document.getElementById('seekFill');
+  var tCur = document.getElementById('tCur');
+  var tDur = document.getElementById('tDur');
+  var vizNote = document.getElementById('vizNote');
+  var canvas = document.getElementById('viz');
+  var ctx = canvas.getContext('2d');
+
+  var tracks = [];
+  var current = -1;
+
+  // The audio graph is built once, on the first PLAY press (a
+  // press is the gesture a browser wants before it will run one).
+  // If the graph can't be built, playback still works and the
+  // ribbons honestly rest — they are never animated by anything
+  // but the real signal.
+  var actx = null, analyser = null, freqData = null, wired = false;
+  var levels = [0, 0, 0, 0];
+  var phase = 0, lastTs = 0, rafId = null;
+
+  function fmt(t) {
+    if (!isFinite(t) || t < 0) { t = 0; }
+    var m = Math.floor(t / 60), s = Math.floor(t % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function setStatus(words) { statusEl.textContent = words; }
+
+  function wireGraph() {
+    if (wired) { return; }
+    wired = true;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { vizNote.style.display = 'block'; return; }
+      actx = new AC();
+      var src = actx.createMediaElementSource(audio);
+      analyser = actx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.55;
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+      src.connect(analyser);
+      analyser.connect(actx.destination);
+    } catch (e) {
+      analyser = null;
+      vizNote.style.display = 'block';
+    }
+  }
+
+  // ---- the ribbons ------------------------------------------------
+  var RIBBON_COLORS = ['#37e0ff', '#ff4fd8', '#7dff5a', '#ffd54a'];
+  var BANDS = [[1, 8], [8, 32], [32, 72], [72, 128]];
+
+  function readLevels() {
+    if (!analyser || !freqData) { return; }
+    analyser.getByteFrequencyData(freqData);
+    for (var b = 0; b < 4; b++) {
+      var lo = BANDS[b][0], hi = BANDS[b][1], sum = 0, n = 0, i;
+      for (i = lo; i < hi && i < freqData.length; i++) { sum += freqData[i]; n++; }
+      var target = n ? (sum / n) / 255 : 0;
+      levels[b] += (target - levels[b]) * 0.4;
+    }
+  }
+
+  function drawRibbons() {
+    var W = canvas.width, H = canvas.height;
+    if (!W || !H) { return; }
+    ctx.fillStyle = '#05070f';
+    ctx.fillRect(0, 0, W, H);
+    var mid = H * 0.52;
+    for (var b = 0; b < 4; b++) {
+      var amp = 2 + levels[b] * H * 0.30;
+      var waves = 3 + b * 1.7;
+      ctx.beginPath();
+      for (var x = 0; x <= W; x += 6) {
+        var u = x / W;
+        var env = Math.sin(u * Math.PI); // ends pinned, middle free
+        var y = mid + Math.sin(u * Math.PI * waves + phase * (1 + b * 0.35) + b * 1.3) * amp * (0.3 + 0.7 * env)
+              + (b - 1.5) * H * 0.045;
+        if (x === 0) { ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
+      }
+      ctx.strokeStyle = RIBBON_COLORS[b];
+      ctx.lineWidth = Math.max(2, H * 0.012);
+      ctx.stroke();
+    }
+  }
+
+  function drawRest() {
+    levels = [0, 0, 0, 0];
+    phase = 0;
+    drawRibbons();
+  }
+
+  function frame(ts) {
+    rafId = requestAnimationFrame(frame);
+    var dt = lastTs ? (ts - lastTs) / 1000 : 0;
+    lastTs = ts;
+    phase += dt * 1.7;
+    readLevels();
+    drawRibbons();
+    updateSeek();
+  }
+
+  function startViz() {
+    if (rafId !== null) { return; }
+    lastTs = 0;
+    rafId = requestAnimationFrame(frame);
+  }
+
+  function stopViz() {
+    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+    drawRest();
+  }
+
+  function fitCanvas() {
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    if (rafId === null) { drawRest(); }
+  }
+
+  // ---- transport --------------------------------------------------
+  function updateSeek() {
+    var d = audio.duration;
+    if (isFinite(d) && d > 0) {
+      seekFill.style.width = (100 * audio.currentTime / d) + '%';
+    } else {
+      seekFill.style.width = '0%';
+    }
+    tCur.textContent = fmt(audio.currentTime);
+    tDur.textContent = fmt(d);
+  }
+
+  function renderList() {
+    listEl.innerHTML = '';
+    if (!tracks.length) {
+      var p = document.createElement('p');
+      p.className = 'empty';
+      p.textContent = 'The library shelf is empty. Tracks live in ' +
+        'the door\u2019s library folder \u2014 when they are on the ' +
+        'shelf, they are listed here.';
+      listEl.appendChild(p);
+      return;
+    }
+    for (var i = 0; i < tracks.length; i++) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'track' + (i === current ? ' now' : '');
+      var num = document.createElement('span');
+      num.className = 'num';
+      num.textContent = (i + 1) + '.';
+      btn.appendChild(num);
+      btn.appendChild(document.createTextNode(tracks[i].name));
+      btn.setAttribute('data-idx', i);
+      btn.onclick = (function (idx) {
+        return function () { selectTrack(idx, true); };
+      })(i);
+      listEl.appendChild(btn);
+    }
+  }
+
+  function markNow() {
+    var rows = listEl.getElementsByTagName('button');
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].className = 'track' + (i === current ? ' now' : '');
+    }
+  }
+
+  function selectTrack(idx, autoplay) {
+    if (idx < 0 || idx >= tracks.length) { return; }
+    current = idx;
+    audio.src = tracks[idx].url;
+    titleEl.textContent = tracks[idx].name;
+    markNow();
+    updateSeek();
+    if (autoplay) { play(); } else { setStatus('READY \u2014 PRESS PLAY'); }
+  }
+
+  function play() {
+    if (current < 0) {
+      if (tracks.length) { selectTrack(0, true); }
+      return;
+    }
+    wireGraph();
+    if (actx && actx.state === 'suspended') { actx.resume(); }
+    var p = audio.play();
+    if (p && p.catch) { p.catch(function () { setStatus('THAT TRACK WOULD NOT PLAY'); }); }
+  }
+
+  function pause() { audio.pause(); }
+
+  playBtn.onclick = function () {
+    if (audio.paused) { play(); } else { pause(); }
+  };
+  document.getElementById('prevBtn').onclick = function () {
+    if (tracks.length) { selectTrack((current - 1 + tracks.length) % tracks.length, true); }
+  };
+  document.getElementById('nextBtn').onclick = function () {
+    if (tracks.length) { selectTrack((current + 1) % tracks.length, true); }
+  };
+
+  function seekTo(clientX) {
+    var rect = seekBar.getBoundingClientRect();
+    var frac = (clientX - rect.left) / rect.width;
+    if (frac < 0) { frac = 0; }
+    if (frac > 1) { frac = 1; }
+    if (isFinite(audio.duration) && audio.duration > 0) {
+      audio.currentTime = frac * audio.duration;
+      updateSeek();
+    }
+  }
+  seekBar.addEventListener('click', function (e) { seekTo(e.clientX); });
+  seekBar.addEventListener('touchstart', function (e) {
+    e.preventDefault();
+    if (e.touches && e.touches.length) { seekTo(e.touches[0].clientX); }
+  }, false);
+
+  audio.addEventListener('play', function () {
+    playBtn.textContent = 'PAUSE';
+    setStatus('PLAYING');
+    startViz();
+  });
+  audio.addEventListener('pause', function () {
+    playBtn.textContent = 'PLAY';
+    if (current >= 0) { setStatus('PAUSED'); }
+    stopViz();
+  });
+  audio.addEventListener('ended', function () {
+    if (tracks.length > 1) {
+      selectTrack((current + 1) % tracks.length, true);
+    } else {
+      playBtn.textContent = 'PLAY';
+      setStatus('STOPPED');
+      stopViz();
+    }
+  });
+  audio.addEventListener('timeupdate', updateSeek);
+  audio.addEventListener('loadedmetadata', updateSeek);
+  audio.addEventListener('error', function () {
+    if (current >= 0) { setStatus('THAT TRACK WOULD NOT PLAY'); }
+  });
+
+  window.addEventListener('resize', fitCanvas);
+
+  // ---- the shelf ----------------------------------------------------
+  function loadLibrary() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'library.json', true);
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) { return; }
+      if (xhr.status === 200) {
+        try {
+          var parsed = JSON.parse(xhr.responseText);
+          tracks = parsed.tracks || [];
+        } catch (e) { tracks = []; }
+      } else { tracks = []; }
+      if (tracks.length) {
+        renderList();
+        selectTrack(0, false);
+      } else {
+        renderList();
+        titleEl.textContent = 'No track picked';
+        setStatus('NO TRACKS IN THE LIBRARY YET');
+      }
+    };
+    xhr.send(null);
+  }
+
+  fitCanvas();
+  drawRest();
+  loadLibrary();
+})();
+</script>
+</body>
+</html>

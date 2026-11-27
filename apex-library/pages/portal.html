@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apex Door</title>
+<link rel="icon" href="data:,">
+<style>
+  /* Weak-seat law, applied literally: flat solid plates stacked
+     largest-first, solid colours only. No gradients, no shadows, no
+     translucent film over anything, no images, no scripts, no sign-in.
+     Words carry the state; a finger-sized plate is the press target. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000000;
+    color: #ffffff;
+    font-family: Arial, Helvetica, sans-serif;
+    padding: 18px;
+  }
+  .door-name {
+    font-size: 20px;
+    letter-spacing: 3px;
+    color: #ffd54a;
+    padding: 6px 2px 14px 2px;
+  }
+  a.plate {
+    display: block;
+    text-decoration: none;
+    color: #ffffff;
+    border-radius: 10px;
+    margin-bottom: 16px;
+  }
+  form.plate {
+    display: block;
+    color: #ffffff;
+    border-radius: 10px;
+    margin-bottom: 16px;
+  }
+  .plate .big {
+    display: block;
+    font-weight: bold;
+    line-height: 1.1;
+  }
+  .plate .small {
+    display: block;
+    margin-top: 8px;
+    line-height: 1.35;
+  }
+  /* Largest plate first: the mesh is the hero. One press back to it. */
+  .mesh  { background: #00707e; padding: 34px 26px; }
+  .mesh .big   { font-size: 52px; }
+  .mesh .small { font-size: 21px; }
+  .mesh .seam  {
+    display: block;
+    margin-top: 12px;
+    font-size: 17px;
+    background: #000000;
+    color: #ffd54a;
+    padding: 8px 10px;
+    border-radius: 6px;
+    line-height: 1.35;
+  }
+  .comms { background: #1e6b1e; padding: 26px; }
+  .comms .big   { font-size: 38px; }
+  .comms .small { font-size: 19px; }
+  .music { background: #8e2233; padding: 26px; }
+  .music .big   { font-size: 38px; }
+  .music .small { font-size: 19px; }
+  .arcade { background: #9e5200; padding: 26px; }
+  .arcade .big   { font-size: 38px; }
+  .arcade .small { font-size: 19px; }
+  .wx    { background: #14497f; padding: 26px; }
+  .wx .big   { font-size: 38px; }
+  .wx .small { font-size: 19px; }
+  .search { background: #5e2b97; padding: 26px; }
+  .search .big   { font-size: 38px; }
+  .search .small { font-size: 19px; }
+  .search .row {
+    display: block;
+    margin-top: 14px;
+  }
+  .search input.q {
+    font-size: 20px;
+    padding: 12px;
+    width: 68%;
+    border: none;
+    border-radius: 6px;
+    color: #000000;
+    background: #ffffff;
+  }
+  .search input.go {
+    font-size: 20px;
+    font-weight: bold;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    background: #ffd54a;
+    color: #000000;
+  }
+  .first-timer {
+    font-size: 16px;
+    color: #cccccc;
+    line-height: 1.45;
+    padding: 4px 2px 10px 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="door-name">THE APEX DOOR</div>
+
+<a class="plate mesh" href="https://castnetmesh.com/event">
+  <span class="big">CAST NET MESH</span>
+  <span class="small">The no-tower event mesh: event floors, gate codes,
+  vendor pickup, and phones relaying for each other where a tower
+  can&rsquo;t.</span>
+  <span class="seam">Events carry age ratings. A rated event checks at its
+  own door &mdash; this page opens the grounds, not every show.</span>
+</a>
+
+<form class="plate search" action="/go" method="get">
+  <span class="big">SEARCH &mdash; SOVEREIGN SEARCH</span>
+  <span class="small">One box does both jobs. Type words to search the
+  web, or type an address &mdash; like tinyradr.com &mdash; to go
+  straight there.</span>
+  <span class="row">
+    <input class="q" type="text" name="q">
+    <input class="go" type="submit" value="GO">
+  </span>
+</form>
+
+<a class="plate comms" href="https://encryptedcb.com/cb">
+  <span class="big">COMMS &mdash; SOVEREIGN CB</span>
+  <span class="small">Push-to-talk radio deck: channels 1&ndash;40 and
+  private rooms, on a callsign, not an account.</span>
+</a>
+
+<a class="plate music" href="/music">
+  <span class="big">MUSIC &mdash; APEX PLAYER</span>
+  <span class="small">Your own library on the door: pick a track, press
+  play, and watch the ribbons move with the music. The files are
+  yours &mdash; the door keeps nothing.</span>
+</a>
+
+<a class="plate arcade" href="/arcade">
+  <span class="big">ARCADE</span>
+  <span class="small">House games on the door: a paddle-and-bricks
+  breaker and the lunar lander. Free to play &mdash; scores stay on
+  your device.</span>
+</a>
+
+<a class="plate wx" href="https://tinyradr.com/forecast">
+  <span class="big">WEATHER</span>
+  <span class="small">The prediction for the ground you&rsquo;re standing
+  on &mdash; set the pin, read the call.</span>
+</a>
+
+<p class="first-timer">First time here? Your device checked the connection
+and opened this door. Press a plate and you&rsquo;re in &mdash; no sign-in,
+no account, and this door remembers nothing about you.</p>
+
+</body>
+</html>

@@ -1,0 +1,1955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APEX — Largemouth Bass · Fishing Line</title>
+<style>
+  /* APEX FISHING LINE FACE — the fishing man's demigachi.
+     One fish, one classic lure, per face (owner scope, Nov 22, 2026).
+     Boot state is the TROPHY WALL: the last landed fish mounted on its
+     plaque over the clock — the 90s singing-bass trophy, but it's a
+     clock, and the fish is yours. A press casts: bobber in the water,
+     wait on the wrist, work the lure with taps, the fish strikes and
+     leaps trying to spit the lure while you tap to hold tension.
+     Land it and the new fish — new random coloration, new size —
+     mounts the wall. Vanilla JS/HTML/CSS long form (Vanilla Doctrine).
+     Battery V2 law FROM BIRTH: static at REST, machinery only when
+     OBSERVED (ApexFace hook), 12 s auto-exit, nothing holds the
+     screen on. Game time is observed time: at REST the water freezes
+     time-true, exactly like every other house face. */
+  :root{
+    --void:#04100d;
+    --ink:#eaf6ef;
+    --dim:#9db8a8;
+    --brass:#c9a227; --brass-hi:#e8c85a;
+    --digit:#ffb52e;
+    --panel:#000000;
+    --danger:#ff5347; --good:#5ee07d; --warn:#ffc44d;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--void)}
+  body{font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none;user-select:none;cursor:pointer;
+    -webkit-tap-highlight-color:transparent}
+  #face{position:absolute;inset:0}
+  #stage{position:absolute;left:0;top:0;
+    width:calc(var(--u,1vmin)*100);height:calc(var(--u,1vmin)*100);transition:transform .38s ease}
+  svg{width:100%;height:100%;display:block}
+  /* STACKED PLATES (v1.1 hybrid, SPEC seat plan): painted plates land
+     in seat order around the procedural SVG — seats 0,1,2,3,5,6 below
+     it (void, sky, far shapes, body, flow, SCRIM at seat 6), seats
+     7,8,9 above it (reed frame set, shimmer set, edge). The stack is
+     the lake's depth; the SVG keeps the subject + function plates. */
+  .plates{position:absolute;inset:0;pointer-events:none}
+  .plates img{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #platesBelow{z-index:0}
+  #svg{position:relative;z-index:1}
+  #platesAbove{z-index:2}
+  .pl-reed,.pl-shim{transition:opacity 1.1s linear}
+  .pl-reed-b,.pl-shim-b{opacity:0}
+  .lbl{position:absolute;width:100%;text-align:center;color:var(--ink);
+    letter-spacing:.22em;font-weight:700;pointer-events:none}
+  #fishLbl{top:calc(var(--u,1vmin)*2.0);font-size:calc(var(--u,1vmin)*3.6);color:var(--brass-hi)}
+  #lureLbl{top:calc(var(--u,1vmin)*6.2);font-size:calc(var(--u,1vmin)*2.0);color:var(--dim);letter-spacing:.16em}
+  #readPanel{position:absolute;left:50%;bottom:calc(var(--u,1vmin)*2.6);transform:translateX(-50%);
+    background:var(--panel);border:2px solid var(--brass);border-radius:calc(var(--u,1vmin)*1.6);
+    padding:calc(var(--u,1vmin)*0.7) calc(var(--u,1vmin)*3.2) calc(var(--u,1vmin)*1.1);text-align:center;min-width:calc(var(--u,1vmin)*52)}
+  #clock{font-size:calc(var(--u,1vmin)*11);font-weight:800;color:var(--digit);line-height:1;
+    letter-spacing:.04em;font-variant-numeric:tabular-nums}
+  #dateLine{font-size:calc(var(--u,1vmin)*2.5);color:var(--ink);letter-spacing:.14em;margin-top:.calc(var(--u,1vmin)*4)}
+  /* THE CALLOUT PLATE (owner fix, Nov 24): the shouts get their own
+     plate, stacked directly on the clock panel — status row over
+     hint row, each row a fixed single line that shrinks to fit, so
+     a callout can never wrap over its neighbour, run off the glass,
+     or float in dead space. One composed stack at the foot. */
+  #calloutPlate{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--u,1vmin)*19.9);
+    background:var(--panel);border:2px solid var(--brass);border-radius:calc(var(--u,1vmin)*1.6);
+    padding:calc(var(--u,1vmin)*0.9) calc(var(--u,1vmin)*3.2) calc(var(--u,1vmin)*1.0);
+    min-width:calc(var(--u,1vmin)*62);max-width:calc(var(--u,1vmin)*96);text-align:center;pointer-events:none}
+  #statusLine{font-size:calc(var(--u,1vmin)*3.05);font-weight:700;letter-spacing:.14em;color:var(--ink);
+    line-height:1.25;white-space:nowrap;overflow:hidden}
+  #statusLine:empty{display:none}
+  #hintLine{font-size:calc(var(--u,1vmin)*2.25);letter-spacing:.16em;color:var(--dim);
+    line-height:1.3;white-space:nowrap;overflow:hidden}
+  #hintLine:empty{display:none}
+  #stateLamp{position:absolute;right:calc(var(--u,1vmin)*2.4);bottom:calc(var(--u,1vmin)*2.4);font-size:calc(var(--u,1vmin)*1.7);
+    letter-spacing:.24em;color:var(--dim);pointer-events:none}
+  #dnrChip{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--u,1vmin)*31);
+    display:none;font-size:calc(var(--u,1vmin)*2.0);letter-spacing:.14em;font-weight:700;
+    color:#0a1a12;background:var(--brass-hi);border-radius:calc(var(--u,1vmin)*1.2);
+    padding:.calc(var(--u,1vmin)*7) calc(var(--u,1vmin)*2.2);text-decoration:none}
+  /* FISH ON! — the set moment, flashed big over the scene */
+  #fishOn{position:absolute;width:100%;text-align:center;top:calc(var(--u,1vmin)*30);
+    font-size:calc(var(--u,1vmin)*11);font-weight:900;letter-spacing:.1em;color:#ffe98a;
+    text-shadow:0 0 18px #ffb300,0 2px 0 #7a4d00,0 4px 14px #000;
+    opacity:0;pointer-events:none}
+  /* the vibration setting — a chip the player owns (battery respect) */
+  #vibeChip{position:absolute;right:calc(var(--u,1vmin)*2.2);top:calc(var(--u,1vmin)*9.6);font-size:calc(var(--u,1vmin)*1.9);
+    letter-spacing:.16em;font-weight:700;color:var(--ink);
+    background:rgba(10,22,16,.72);border:1px solid var(--brass);
+    border-radius:calc(var(--u,1vmin)*1.1);padding:.calc(var(--u,1vmin)*6) calc(var(--u,1vmin)*1.6);cursor:pointer;
+    -webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+
+<script>
+/* ==== APEX BOUND — direct parameter load (fleet bound fix, Nov 23, 2026) ====
+   The container senses the display ONCE and loads the bound; this
+   script paints inside the loaded parameter with margin (15/16).
+   Fallback when no container parameter exists (bench / plain web):
+   the window's own inner size, same margin. window.__boundReport
+   carries {src, sensed, paint, rect, corr} for the bench. */
+(function(){
+  "use strict";
+  function loadBound(){
+    var w = window.innerWidth || 0, h = window.innerHeight || 0, src = "window";
+    try {
+      if (window.ApexBound && ApexBound.getW() > 0 && ApexBound.getH() > 0) {
+        var nw = ApexBound.getW(), nh = ApexBound.getH();
+        /* rotation: if the window's orientation disagrees with the
+           sensed frame, the sensed frame is the stale one — swap it */
+        if ((w > h) !== (nw > nh) && nw !== nh) { var t = nw; nw = nh; nh = t; }
+        w = nw; h = nh; src = "container";
+      }
+    } catch(e){}
+    if (!w || !h) return;
+    var sensed = Math.min(w, h);
+    var paint = Math.floor(sensed * 15 / 16);
+    var root = document.documentElement;
+    root.style.setProperty("--u", (paint / 100) + "px");
+    var fc = document.getElementById("face");
+    if (fc) { fc.style.width = w + "px"; fc.style.height = h + "px"; }
+    var st = document.getElementById("stage");
+    if (st) {
+      st.style.left = Math.round((w - paint) / 2) + "px";
+      st.style.top = Math.round((h - paint) / 2) + "px";
+    }
+    window.__boundReport = { src: src, sensedW: w, sensedH: h, sensed: sensed, paint: paint, corr: 1 };
+    /* one verification pass: if the painted stage does not measure
+       to the loaded bound, correct the unit ONCE and re-centre */
+    requestAnimationFrame(function(){
+      var s2 = document.getElementById("stage");
+      if (!s2 || !window.__boundReport) return;
+      var r = s2.getBoundingClientRect();
+      window.__boundReport.rect = Math.round(r.width * 10) / 10;
+      if (r.width > 0) {
+        var corr = paint / r.width;
+        window.__boundReport.corr = Math.round(corr * 1000) / 1000;
+        if (Math.abs(corr - 1) > 0.02) {
+          var p2 = Math.round(paint * corr);
+          root.style.setProperty("--u", (p2 / 100) + "px");
+          s2.style.left = Math.round((w - p2) / 2) + "px";
+          s2.style.top = Math.round((h - p2) / 2) + "px";
+          window.__boundReport.paint = p2;
+        }
+      }
+    });
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", loadBound);
+  else loadBound();
+  var rzT = 0;
+  window.addEventListener("resize", function(){
+    clearTimeout(rzT); rzT = setTimeout(loadBound, 120);
+  });
+})();
+</script>
+<div id="face">
+  <div id="stage">
+    <div class="plates" id="platesBelow"><img alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAMAAAAshD+zAAADAFBMVEUEEA0QKiIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsC81bAAABAHRSTlP/AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXINxqwAAAOpJREFUeNrt29F1g0AQBEFN/kk7Aj/LMpagqcqgvzhu9x4PAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAnrCf5YIuF7ojRbPOk7h3qHZ9onCfkQ17Q+DOIBv2P4E7m27ZcX07r27ZX/t2BeG0F/O2bN2updz2q7otW7drKrc9VbeF68pxW7duC9eV47ZwnThx4sSJu8O34MYnlPTZ0i+Pv1X3DK6IDk2L31u2b5zbs4L4lKc9n4tPVuMz8fo2Q3wPpb5BFN/9ym/t1fct85uy+R3n/nb6Dd4V3OBFyD3e8gAAAADf+wIDPyQq2nhU6QAAAABJRU5ErkJggg=="><img alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAMAAAAshD+zAAADAFBMVEUAAADM5+bk8Nnc7d7g79y/4+4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACT7jymAAABAHRSTlMA//////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/zO5nQAAAIFJREFUeNrtzwkNACAMBLDx+beMipFwaR20TrAaweTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5FJzK5icnJycnFx0bgeT+zY3g8nJycnJycnJyb3NAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADQ5QInNGBBY4TbnQAAAABJRU5ErkJggg=="><img alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAMAAAAshD+zAAAB/lBMVEUAAAAdOiYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADPHqMkAAAAgHRSTlMA5gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANjem44AAADrSURBVHja7dVBDsIwDATA+P+fBsEBgYB6QysgmjnbIbttxRgAAAAAAAAAAADTauVsZwtHOzhdfTlbFK/yX/hGX3XniMtOdLfTl1SP9r5s3l3ySKJomxeYbqK7UdkjybKFC+F7sbURDb0brdeShbi7+vAN7pxXlaXbp4rXG80KOufVlmg+rO7JxmwFz2arIRoPq2teZ+ZtqKZoOsx229irsyzbZb6i6RFv9DvrHFcHGgccP/LO/sjC0a7hat1wta6Vswkn3M/+FQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPy/E6uxC/xMBxMHAAAAAElFTkSuQmCC"><img alt="" src="data:image/png;base64,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"><img alt="" src="data:image/png;base64,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"><img alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAMAAAAshD+zAAAB/lBMVEUAAADq8+3r9O6MkY61vLfS2tTi6+VfY2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADdCC80AAAAgHRSTlMAEi0BAgQGAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKHY7SAAAAB+SURBVHja7dm5AcAwDAMx5vX+G2cJOwUNbHClxAQAAAAAAAAAAACAfY1iuYrlLpanWN5iOYqJEydO3Ly4s5g4ceLEiRMnTpy4f+NcBeLEiRO3fVz1x7l6K6heear3OQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1vkA5iNEwVToDu8AAAAASUVORK5CYII="></div>
+    <svg id="svg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet"
+         xmlns="http://www.w3.org/2000/svg" aria-label="Largemouth Bass fishing game face"></svg>
+    <div class="plates" id="platesAbove"><img alt="" class="pl-reed pl-reed-a" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAMAAAAshD+zAAAB/lBMVEUAAAAsWjwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACblqsWAAAAgHRSTlMAzQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMuN7mcAAAHESURBVHja7ddJgoIwFEDB/PtfunvRrQwBfiCAQ9XChUbkMYRYCgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwHSI+eEfEvVJcyw6Le7243OjmuLOOxrG4+rfFvXfc7+sZN/SJE0pD3QvEZTd8e9yuuSy9Ax8dF+8XFwcfdLE46hPi4qK4x0a3Bg2GdI4ro7hyc1zpEDfb3DMu3isu8nER3eM2roXpATgYVz1WZ8ZFj7iIXXHls+PipLjMTZe+LBcm+W+Lm910R+KWv7IrLleXjSvnxpVouS/X4uY/momLYVx0j4tviqvtZGL9Ndq3R1xiRrki7jHuzrjoPaEci6t/9oyLm+JKjzM3+iwOx6X+q6WWg6OJfu9lOfheKi5mD40L4uaVtTlnJW5c1xIXrXGRjZtF9YlbeDJ3iSuXxa1cl9W4shaXWTgORyXiYjmuNMVNfvW14x5vlcyMMjx1S0/mlbiSj6ueiN1x0TUuLo0b1d0U97ft7bqb4gZ1iwvG6TvjuEjGle240iWueuoW11Qxr9sVF9txtZtOXDquNMZt1zXHxfojOxs32dR/3KxlvE7YE5f4p30g7gdAEQWgwNcb8wAAAABJRU5ErkJggg=="><img alt="" class="pl-reed pl-reed-b" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAMAAAAshD+zAAAB/lBMVEUAAAAsWjwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACblqsWAAAAgHRSTlMAzQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMuN7mcAAAIVSURBVHja7djRboMgGIBR/vd/6SVr5wQRUSFtt3Mulqyp2m8VkKUEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQiPvPyHQdGiPvXcddPIu563IjzHp5l9w1X45rHPb+yfxPXfZ2/HFd538GlJsU1TvoWcbfmk4O49WR5466sHvvz2vc1Pjou3Y47mdkZF3Pmk9V5J8XtH3EnLp2O65hPzsV1zien404PufT6uHnzSVfcpSEXN+O6Blj+0vPMaVrcc7y9Pu7xQSbFNW7L/G86My4+Ja45M+7elSPjnmHRjlsv4t2PEFfi0t+MWz7IQdzJu7JnDU9j5pN2XEyI+xly9cNacesjLsYVQ07cvLhNUOX1/U+xd/Sygj9+bywiF+eTd4pLQ+N2tlqz4zbbnXx5uBu3/L3ijeLS28T1L3P5A8hy0Sjiqruby3EHQ64ZF1fjlq89Vj8eL6SBcelE3O5c3hGXz/SruN/tfv6e2qpzJi71xcWYuNrXHpu4NCYujuKi3M51x/UOufWNUW5XB8Wljrh0M654/sieaiO/PxsPQKeWuRfHxTau+XQXZ+OiP267k74aV5z2BXExN251P9QecD8orvjoZVz9Ha+N253FOuNSHhcj435Xgp1txufGZRvEsXH1vesmLuVxMTwu+uO2Bd1xxfGVL66Iq/yLc2TcasxPiktlXOqO+wKrtwZwAUrMKwAAAABJRU5ErkJggg=="><img alt="" class="pl-shim pl-shim-a" style="opacity:.85" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAMAAAAshD+zAAAB/lBMVEUAAAD//Ob//Ob//Ob//OYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABlKLJ4AAAAgHRSTlMAbzNPgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJZTGbkAAAEXSURBVHja7dzRDoIwDAVQRP7/m40Eg4nGgMDWree8k5BL7bpBHAYAAAAAAAAAAAAAAAAAAAAArnF7CnZP48yzOSHH3dfcF9Lj7dcoBtb1ItyKUTULaVTIXQpwevfSz8I/seDVpHgsxylGVLtkRwoRO7AkoCGOu3vqv6FXYU8JAKgx6CaZdKdFzXHvj5HPTuSjXiXyPRopbK+gXWFd3jq8rKGsI7Xm3CJ175REDJnOD5PUnQGX3wOiTQ5917kQADsV4u68gt3R64BS1QP2s/33fFJNHOqPUpWm1ohboDLACABAf0YfgtAynzIDACvHGByfLc2XKqDxEtAHiy03gkafBCCqZC98psp/yZRm+q06/xpBAAAANnoAn7YC/DREAhYAAAAASUVORK5CYII="><img alt="" class="pl-shim pl-shim-b" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAMAAAAshD+zAAAB/lBMVEUAAAD//Ob//Ob//Ob//OYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABlKLJ4AAAAgHRSTlMAT280gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALSBYpkAAAEQSURBVHja7dzRDoIwDAVQUP//mzURX0yYYwzsyjnvxOQyunao0wQAAAAAAAAAAAAAAAAAAACQwe3llA+aF5GDOCuLzItJhgCctOHIIa7YTR8c6f4hCmBD1ZADxa7KanW3AQjXwv2s6Mr6nplaEF04P/1v9g6wwz4M6jMGTbB7ga4cIHD3Ou+4dNvFTvCAqiohiJLmb8ktE6iAAaqLrRzaOPPE8srQlUsh4b4mBt0FpbKn7gHN/ZIiAtB97L/e3O/1GIww0pvpGXRjPXr3sn8xbnHf03qOsvbXn1P/0EUWjzdBfD3gRtckI4gyTdCVWTGGXON0z6+CAaBP1yuKEW+dFCAFL3rWp72+KYsUAACu7gkn9wLPYujcSwAAAABJRU5ErkJggg=="><img alt="" class="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAMAAAAshD+zAAAB/lBMVEUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA9GyJsAAAAgHRSTlMCSi9iAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADtQHdUAAAFbSURBVHja7c8xbgMxAANB6vT/Pye2i0gXI2UMEbMdO07mo1HXk5VO20uXUttTl1bbQ5da27cu+74Ob9ekSPbLlzbbqkudbdGlz/ajy1tbjuutLndbDu6uu+FyeH/hkhLdiqux7boVl/To4ODgPotLinRwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHD/gruKbHBwcJ/GXT22FdejW2033FVie487m/ej2HCL7kzh/n/suJvu7MYdN/psC27U2VbcaLNtuALfrskctc3MWt184Gar7YmbpbYXbnba5hedPTHFvBI6TgAAAABJRU5ErkJggg=="></div>
+  </div>
+  <div class="lbl" id="fishLbl">LARGEMOUTH BASS</div>
+  <div class="lbl" id="lureLbl">RAPALA ORIGINAL FLOATER</div>
+  <div id="calloutPlate"><div id="statusLine"></div><div id="hintLine">TAP TO CAST</div></div>
+  <div id="fishOn">FISH ON!</div>
+  <div id="vibeChip">VIBE ON</div>
+  <a id="dnrChip" href="https://mdnr-elicense.com" target="_blank" rel="noopener">MI DNR — FISHING LICENSE ↗</a>
+  <div id="readPanel">
+    <div id="clock">--:--</div>
+    <div id="dateLine">—</div>
+  </div>
+  <div id="stateLamp">REST</div>
+</div>
+<script>
+"use strict";
+/* ================= CONFIG (stamped per face by build_faces.py) ====== */
+var CFG = {"slug": "largemouth-bass", "lureShort": "Rapala", "lureKind": "longbody", "mi": false, "sky": ["#bfe3ee", "#e8f2d8"], "water": ["#3d7a5a", "#123527"], "trees": "#1d3a26", "weed": "#2c5a3c", "fish": {"name": "Largemouth Bass", "hue": 96, "sat": 42, "backL": 26, "flankL": 44, "bellyL": 76, "hueJitter": 10, "pattern": "lateral", "depth": 0.36, "tail": "forked", "lenMin": 10, "lenMax": 26, "cond": 50, "closeFrame": "throat"}};
+
+/* ================= helpers ========================================== */
+var svg = document.getElementById("svg");
+var NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent){
+  var n = document.createElementNS(NS, tag);
+  for(var k in attrs) n.setAttribute(k, attrs[k]);
+  if(parent) parent.appendChild(n);
+  return n;
+}
+function txt(parent, x, y, s, attrs){
+  var t = el("text", attrs || {}, parent);
+  t.setAttribute("x", x); t.setAttribute("y", y);
+  t.textContent = s; return t;
+}
+/* seeded RNG — a catch is rolled from its seed, so the mounted fish is
+   the same fish every time the wall paints, until the next catch. */
+function RNG(seed){
+  var s = (seed >>> 0) || 1;
+  return function(){
+    s ^= s << 13; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+    return s / 4294967296;
+  };
+}
+function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t){ return a + (b - a) * t; }
+
+/* ================= colour: species-true, rolled per catch =========== */
+/* Roll a colourway for CFG.fish from a seed: back / flank / belly hsl,
+   pattern strength and a size inside the species' real range. */
+function rollCatch(seed){
+  var r = RNG(seed), F = CFG.fish;
+  /* AGE/GROWTH rolls first — it drives the size and the wear on the
+     fish. An old fish comes up heavy and scarred; a dinosaur comes up
+     monstrous, over the species' book range, slime and all. */
+  var au = r(), ageClass = "prime";
+  if(au < 0.30) ageClass = "young";
+  else if(au >= 0.95) ageClass = "dinosaur";
+  else if(au >= 0.75) ageClass = "old";
+  var span = F.lenMax - F.lenMin, lenIn;
+  if(ageClass === "young") lenIn = F.lenMin + r() * 0.35 * span;
+  else if(ageClass === "old") lenIn = F.lenMax - 0.35 * span + r() * 0.35 * span;
+  else if(ageClass === "dinosaur") lenIn = F.lenMax + r() * 0.12 * span;
+  else lenIn = F.lenMin + r() * span;
+  var ageDark = ageClass === "dinosaur" ? 10 : (ageClass === "old" ? 6 : 0);
+  var hueJit = (r() - 0.5) * 2 * F.hueJitter;
+  var back  = { h: F.hue + hueJit,       s: clamp(F.sat - ageDark * 0.7 + (r()-0.5)*14, 8, 90),  l: clamp(F.backL - ageDark + (r()-0.5)*9, 8, 60) };
+  var flank = { h: F.hue + hueJit * 0.7, s: clamp(F.sat - 6 + (r()-0.5)*12, 8, 88), l: clamp(F.flankL - ageDark * 0.5 + (r()-0.5)*9, 18, 78) };
+  var belly = { h: F.hue + hueJit * 0.4, s: clamp(F.sat - 22 + (r()-0.5)*8, 4, 70), l: clamp(F.bellyL + (r()-0.5)*6, 55, 94) };
+  /* weight from length, species condition factor (rough, labelled in UI
+     as the catch card's figures — a game measure, not a scale). */
+  var lbs = Math.pow(lenIn, 3) * F.cond / (F.condDiv || 100000);
+  return {
+    seed: seed, back: back, flank: flank, belly: belly,
+    ageClass: ageClass,
+    patA: clamp(0.55 + r() * 0.45 + (ageClass === "old" || ageClass === "dinosaur" ? 0.18 : 0), 0, 1),
+    patSeed: Math.floor(r() * 1e9),
+    lenIn: lenIn, lbs: lbs
+  };
+}
+function hsl(c, a){ return "hsla(" + c.h.toFixed(1) + "," + c.s.toFixed(1) + "%," + c.l.toFixed(1) + "%," + (a == null ? 1 : a) + ")"; }
+
+/* ================= the fish ========================================= */
+/* Procedural species fish, drawn facing LEFT (head at -x), centred on
+   (0,0), body length L px. Shape knobs come from CFG.fish: depth ratio,
+   tail style, snout, bill (marlin), pattern kind. */
+function drawFish(parent, C, L, opts){
+  opts = opts || {};
+  var F = CFG.fish;
+  var g = el("g", {}, parent);
+  var d = L * F.depth;                       /* body depth */
+  var hl = L * 0.24;                         /* head length */
+  var r = RNG(C.patSeed);
+  /* body outline: nose -> back -> tail peduncle -> belly -> nose */
+  var p = [];
+  p.push("M " + (-L/2) + " 0");
+  p.push("Q " + (-L/2 + hl*0.7) + " " + (-d*0.62) + " " + (-L/2 + hl) + " " + (-d*0.46));
+  p.push("Q " + (L*0.05) + " " + (-d*0.56) + " " + (L*0.30) + " " + (-d*0.20));
+  p.push("L " + (L*0.40) + " " + (-d*0.10));
+  /* tail */
+  var tx = L/2, th = d * (F.tail === "round" ? 0.52 : 0.78);
+  if(F.tail === "forked"){
+    p.push("L " + (tx + L*0.10) + " " + (-th/2));
+    p.push("L " + (tx + L*0.035) + " 0");
+    p.push("L " + (tx + L*0.10) + " " + (th/2));
+  } else if(F.tail === "round"){
+    p.push("Q " + (tx + L*0.13) + " 0 " + (tx + L*0.02) + " " + (th/2));
+  } else { /* square / paddle */
+    p.push("L " + (tx + L*0.09) + " " + (-th/2));
+    p.push("L " + (tx + L*0.09) + " " + (th/2));
+  }
+  p.push("L " + (L*0.40) + " " + (d*0.10));
+  p.push("Q " + (L*0.05) + " " + (d*0.56) + " " + (-L/2 + hl) + " " + (d*0.46));
+  p.push("Q " + (-L/2 + hl*0.7) + " " + (d*0.62) + " " + (-L/2) + " 0 Z");
+  var bodyGrad = "grad" + Math.floor(r() * 1e9);
+  var defs = el("defs", {}, g);
+  var lg = el("linearGradient", { id: bodyGrad, x1: "0", y1: "0", x2: "0", y2: "1" }, defs);
+  el("stop", { offset: "0%",  "stop-color": hsl(C.back) }, lg);
+  el("stop", { offset: "52%", "stop-color": hsl(C.flank) }, lg);
+  el("stop", { offset: "100%","stop-color": hsl(C.belly) }, lg);
+  el("path", { d: p.join(" "), fill: "url(#" + bodyGrad + ")",
+    stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-10)}), "stroke-width": 2.3 }, g);
+  /* dorsal fin */
+  el("path", { d: "M " + (-L*0.06) + " " + (-d*0.47) + " Q " + (L*0.10) + " " + (-d*0.78) + " " + (L*0.24) + " " + (-d*0.30) +
+                 " Q " + (L*0.08) + " " + (-d*0.40) + " " + (-L*0.06) + " " + (-d*0.47) + " Z",
+    fill: hsl({h:C.back.h, s:C.back.s, l:C.back.l+6}, 0.9) }, g);
+  /* pectoral fin */
+  el("path", { d: "M " + (-L*0.20) + " " + (d*0.16) + " Q " + (-L*0.06) + " " + (d*0.44) + " " + (L*0.02) + " " + (d*0.30) +
+                 " Q " + (-L*0.10) + " " + (d*0.10) + " " + (-L*0.20) + " " + (d*0.16) + " Z",
+    fill: hsl({h:C.flank.h, s:C.flank.s, l:C.flank.l-8}, 0.85) }, g);
+  /* patterns */
+  var pat = F.pattern;
+  if(pat === "spots" || pat === "speckle"){
+    var n = pat === "spots" ? 26 : 60, dark = pat === "spots";
+    for(var i = 0; i < n; i++){
+      var sx = -L*0.34 + r() * L*0.66, sy = (r() - 0.5) * d * 0.66;
+      var sr = (pat === "spots" ? 2.6 : 1.5) + r() * 2.2;
+      el("circle", { cx: sx.toFixed(1), cy: sy.toFixed(1), r: sr.toFixed(1),
+        fill: dark ? hsl({h:C.back.h, s:C.back.s, l:Math.max(5, C.back.l-16)}, C.patA)
+                   : hsl({h:C.belly.h, s:30, l:88}, C.patA * 0.9) }, g);
+    }
+  } else if(pat === "lateral"){ /* bass-style dark lateral stripe */
+    el("path", { d: "M " + (-L*0.40) + " 0 Q " + (0) + " " + (d*0.10) + " " + (L*0.40) + " " + (d*0.02),
+      fill: "none", stroke: hsl({h:C.back.h, s:C.back.s+8, l:Math.max(6, C.back.l-14)}, 0.75 + C.patA*0.25),
+      "stroke-width": (d*0.13).toFixed(1), "stroke-linecap": "round" }, g);
+  } else if(pat === "mottle"){
+    for(var m = 0; m < 7; m++){
+      var mx = -L*0.30 + m * L*0.10 + (r()-0.5)*6;
+      el("path", { d: "M " + mx + " " + (-d*0.42) + " Q " + (mx + L*0.05) + " 0 " + mx + " " + (d*0.42),
+        fill: "none", stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-13)}, C.patA*0.8),
+        "stroke-width": (4 + r()*5).toFixed(1), "stroke-linecap": "round" }, g);
+    }
+  } else if(pat === "bars"){
+    for(var b = 0; b < 6; b++){
+      var bx = -L*0.26 + b * L*0.115;
+      el("path", { d: "M " + bx + " " + (-d*0.33) + " Q " + (bx + 5) + " 0 " + bx + " " + (d*0.33),
+        fill: "none", stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-12)}, C.patA*0.75),
+        "stroke-width": (5 + r()*3).toFixed(1), "stroke-linecap": "round" }, g);
+    }
+  } else if(pat === "lightspots"){ /* pike: light beans on dark */
+    for(var q = 0; q < 34; q++){
+      var qx = -L*0.36 + r() * L*0.72, qy = (r() - 0.5) * d * 0.7;
+      el("ellipse", { cx: qx.toFixed(1), cy: qy.toFixed(1), rx: (3 + r()*3.4).toFixed(1), ry: (1.7 + r()*1.4).toFixed(1),
+        fill: hsl({h:C.belly.h, s:36, l:80}, C.patA) }, g);
+    }
+  } else if(pat === "stripes"){ /* marlin cobalt bands */
+    for(var s2 = 0; s2 < 8; s2++){
+      var vx = -L*0.30 + s2 * L*0.085;
+      el("path", { d: "M " + vx + " " + (-d*0.38) + " Q " + (vx + 4) + " 0 " + vx + " " + (d*0.28),
+        fill: "none", stroke: "hsla(222,80%,72%," + (C.patA*0.8) + ")",
+        "stroke-width": 3.4, "stroke-linecap": "round" }, g);
+    }
+  }
+  if(F.earflap){ /* bluegill's dark ear */
+    el("path", { d: "M " + (-L*0.335) + " " + (-d*0.16) + " Q " + (-L*0.27) + " 0 " + (-L*0.335) + " " + (d*0.18) +
+                   " Q " + (-L*0.375) + " 0 " + (-L*0.335) + " " + (-d*0.16) + " Z",
+      fill: "hsla(220,30%,10%,0.92)" }, g);
+  }
+  if(F.bill){ /* marlin bill */
+    el("path", { d: "M " + (-L/2) + " " + (-d*0.05) + " L " + (-L/2 - L*0.30) + " " + (d*0.02) + " L " + (-L/2) + " " + (d*0.10) + " Z",
+      fill: hsl({h:C.back.h, s:C.back.s, l:C.back.l+4}) }, g);
+    el("path", { d: "M " + (-L*0.02) + " " + (-d*0.50) + " Q " + (L*0.05) + " " + (-d*1.05) + " " + (L*0.16) + " " + (-d*0.34) +
+                   " Q " + (L*0.06) + " " + (-d*0.44) + " " + (-L*0.02) + " " + (-d*0.50) + " Z",
+      fill: hsl({h:C.back.h, s:C.back.s, l:C.back.l+2}) }, g);
+  }
+  /* gill line + eye + mouth */
+  el("path", { d: "M " + (-L/2 + hl*0.92) + " " + (-d*0.40) + " Q " + (-L/2 + hl*0.66) + " 0 " + (-L/2 + hl*0.92) + " " + (d*0.40),
+    fill: "none", stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-12)}, 0.65), "stroke-width": 1.6 }, g);
+  el("circle", { cx: -L/2 + hl*0.38, cy: -d*0.14, r: Math.max(2.2, L*0.020), fill: "#0b0f0c" }, g);
+  el("circle", { cx: -L/2 + hl*0.38 - 0.8, cy: -d*0.14 - 0.8, r: Math.max(0.8, L*0.007), fill: "#e8f2e4" }, g);
+  el("path", { d: "M " + (-L/2 + 1) + " " + (d*0.10) + " Q " + (-L/2 + hl*0.4) + " " + (d*0.20) + " " + (-L/2 + hl*0.62) + " " + (d*0.13),
+    fill: "none", stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-14)}, 0.8), "stroke-width": 1.5 }, g);
+  if(opts.plate){ /* a hint of shine on the mounted fish */
+    el("path", { d: "M " + (-L*0.30) + " " + (-d*0.40) + " Q " + (0) + " " + (-d*0.52) + " " + (L*0.28) + " " + (-d*0.26),
+      fill: "none", stroke: "hsla(0,0%,100%,0.20)", "stroke-width": 3, "stroke-linecap": "round" }, g);
+  }
+  if(C.ageClass === "old" || C.ageClass === "dinosaur"){
+    /* AGE rendered on the fish: pale scar slashes, and for a dinosaur
+       the slime sheen over the back — an old-growth animal. */
+    var sr2 = RNG(C.patSeed + 77), nSc = C.ageClass === "dinosaur" ? 4 : 2;
+    for(var sc = 0; sc < nSc; sc++){
+      var sx2 = -L*0.28 + sr2() * L*0.5, sy2 = (sr2() - 0.5) * d * 0.4;
+      el("path", { d: "M " + sx2.toFixed(1) + " " + sy2.toFixed(1) + " l " + (7 + sr2()*8).toFixed(1) + " " + (4 + sr2()*5).toFixed(1),
+        fill: "none", stroke: "hsla(60,26%,82%,0.75)", "stroke-width": 1.7, "stroke-linecap": "round" }, g);
+    }
+    if(C.ageClass === "dinosaur")
+      el("path", { d: "M " + (-L*0.36) + " " + (-d*0.30) + " Q " + (0) + " " + (-d*0.60) + " " + (L*0.34) + " " + (-d*0.18) +
+                     " Q " + (0) + " " + (-d*0.34) + " " + (-L*0.36) + " " + (-d*0.30) + " Z",
+        fill: "hsla(112,42%,64%,0.30)" }, g);
+  }
+  return g;
+}
+
+/* ================= the lure ========================================= */
+/* Drawn at (0,0), hanging nose-up on the line; length ~34 px.
+   Kinds: longbody (Rapala class), spoon, spinner (Aglia class),
+   bucktail, plug (Kwikfish class), beetle (Beetle Spin class),
+   craw (crawfish crank), dearie (weight-forward), squid (marlin). */
+function drawLure(parent, kind, seed){
+  var g = el("g", {}, parent), r = RNG(seed || 7);
+  function treble(x, y, s){
+    var t = el("g", { transform: "translate(" + x + " " + y + ") scale(" + (s || 1) + ")" }, g);
+    el("path", { d: "M0 0 L-3.4 6.4 M0 0 L0 7.4 M0 0 L3.4 6.4", fill: "none",
+      stroke: "#cfd8dc", "stroke-width": 1.3, "stroke-linecap": "round" }, t);
+    el("circle", { cx: 0, cy: -0.6, r: 1.4, fill: "none", stroke: "#cfd8dc", "stroke-width": 1 }, t);
+  }
+  if(kind === "longbody"){ /* Rapala long body, three trebles (owner spec) */
+    el("path", { d: "M0 -17 Q5 -8 4.4 4 Q4 13 0 17 Q-4 13 -4.4 4 Q-5 -8 0 -17 Z",
+      fill: "hsla(28,42%,52%,1)", stroke: "hsla(24,45%,26%,1)", "stroke-width": 1.2 }, g);
+    el("path", { d: "M0 -17 Q5 -8 4.4 4 L-4.4 4 Q-5 -8 0 -17 Z", fill: "hsla(210,16%,72%,1)" }, g);
+    el("path", { d: "M-4.6 6 Q0 9.6 4.6 6 L3.4 11 Q0 13 -3.4 11 Z", fill: "hsla(0,0%,88%,0.9)" }, g); /* lip */
+    el("circle", { cx: -2.4, cy: -11, r: 1.5, fill: "#14100c" }, g);
+    el("circle", { cx: 2.4, cy: -11, r: 1.5, fill: "#14100c" }, g);
+    treble(0, -3, 1); treble(0, 6, 1); treble(0, 14, 1);   /* THREE trebles */
+  } else if(kind === "spoon"){ /* hammered wobbling spoon (Mauler class) */
+    el("path", { d: "M0 -16 Q7 -6 6 6 Q5 15 0 18 Q-5 15 -6 6 Q-7 -6 0 -16 Z",
+      fill: "hsla(43,74%,58%,1)", stroke: "hsla(40,60%,30%,1)", "stroke-width": 1.2 }, g);
+    for(var i = 0; i < 5; i++)
+      el("circle", { cx: (r()-0.5)*6, cy: -10 + i*5.4, r: 1.1, fill: "hsla(43,60%,36%,0.55)" }, g);
+    el("path", { d: "M-3 -12 Q0 -4 -2 6", fill: "none", stroke: "hsla(0,0%,100%,0.5)", "stroke-width": 1.6 }, g);
+    treble(0, 17, 1.05);
+  } else if(kind === "spinner"){ /* Aglia class: blade, beads, dressed treble */
+    el("ellipse", { cx: 0, cy: -8, rx: 5.4, ry: 9.5, fill: "hsla(46,80%,60%,1)",
+      stroke: "hsla(42,64%,32%,1)", "stroke-width": 1.1, transform: "rotate(14)" }, g);
+    el("ellipse", { cx: -0.6, cy: -8.6, rx: 2.6, ry: 5.4, fill: "hsla(48,90%,76%,0.9)", transform: "rotate(14)" }, g);
+    el("line", { x1: 0, y1: -15, x2: 0, y2: 13, stroke: "#b9c4c9", "stroke-width": 1.4 }, g);
+    el("circle", { cx: 0, cy: 0, r: 2.2, fill: "hsla(4,72%,46%,1)" }, g);
+    el("circle", { cx: 0, cy: 5, r: 1.9, fill: "hsla(210,60%,46%,1)" }, g);
+    el("path", { d: "M-2.6 10 Q-4.4 16 -2 19 Q0 15.4 2 19 Q4.4 16 2.6 10 Q0 12.4 -2.6 10 Z",
+      fill: "hsla(26,60%,34%,1)" }, g); /* bucktail dressing */
+    treble(0, 12, 0.9);
+  } else if(kind === "bucktail"){ /* Musky Killer class: big blade + long tail */
+    el("ellipse", { cx: 0, cy: -11, rx: 6.4, ry: 11, fill: "hsla(210,14%,78%,1)",
+      stroke: "hsla(210,12%,44%,1)", "stroke-width": 1.1, transform: "rotate(12)" }, g);
+    el("line", { x1: 0, y1: -16, x2: 0, y2: 8, stroke: "#b9c4c9", "stroke-width": 1.5 }, g);
+    el("path", { d: "M-3.4 4 Q-5 16 -2.4 24 Q0 17 2.4 24 Q5 16 3.4 4 Q0 7 -3.4 4 Z",
+      fill: "hsla(45,30%,16%,1)" }, g);
+    treble(0, 9, 1.1);
+  } else if(kind === "plug"){ /* Kwikfish class: banana plug, rattling curve */
+    el("path", { d: "M-1 -16 Q7 -8 6.4 3 Q6 13 1 18 Q-4 12 -4.6 2 Q-5 -9 -1 -16 Z",
+      fill: "hsla(96,42%,52%,1)", stroke: "hsla(96,40%,26%,1)", "stroke-width": 1.2 }, g);
+    el("path", { d: "M-4.4 -2 Q0 1.4 6.2 -1 L6 4 Q0 6.6 -4.6 3.6 Z", fill: "hsla(350,66%,48%,0.85)" }, g);
+    el("circle", { cx: -1.8, cy: -11, r: 1.5, fill: "#14100c" }, g);
+    treble(0, 2, 1); treble(0, 13, 1);
+  } else if(kind === "beetle"){ /* Beetle Spin class: safety-pin arm + grub */
+    el("path", { d: "M0 -16 L7 -6 L0 -1", fill: "none", stroke: "#c7d0d4", "stroke-width": 1.4 }, g);
+    el("ellipse", { cx: 8.4, cy: -8, rx: 2.6, ry: 5.2, fill: "hsla(46,80%,60%,1)", transform: "rotate(38 8.4 -8)" }, g);
+    el("path", { d: "M0 -1 Q3.4 5 2.4 11 Q1.6 16 -1 19 Q-2.4 12 -1.2 6 Q-0.4 1 0 -1 Z",
+      fill: "hsla(60,66%,62%,1)", stroke: "hsla(60,40%,34%,1)", "stroke-width": 1 }, g);
+    el("circle", { cx: 0.4, cy: 1.4, r: 2.3, fill: "hsla(210,10%,26%,1)" }, g);
+  } else if(kind === "craw"){ /* Rebel Crawfish class */
+    el("path", { d: "M0 -14 Q6.4 -8 6 3 Q5.4 12 0 15 Q-5.4 12 -6 3 Q-6.4 -8 0 -14 Z",
+      fill: "hsla(18,58%,40%,1)", stroke: "hsla(16,55%,22%,1)", "stroke-width": 1.2 }, g);
+    el("path", { d: "M-5.6 -4 Q-11 -8 -12.4 -13 M5.6 -4 Q11 -8 12.4 -13", fill: "none",
+      stroke: "hsla(18,58%,34%,1)", "stroke-width": 2.6, "stroke-linecap": "round" }, g);
+    el("path", { d: "M-4 8 Q0 10.4 4 8 M-4.6 3.4 Q0 5.8 4.6 3.4", fill: "none",
+      stroke: "hsla(16,55%,24%,0.8)", "stroke-width": 1.2 }, g);
+    el("circle", { cx: -2.6, cy: -9, r: 1.4, fill: "#14100c" }, g);
+    el("circle", { cx: 2.6, cy: -9, r: 1.4, fill: "#14100c" }, g);
+    treble(0, 5, 0.95); treble(0, 13, 0.95);
+  } else if(kind === "dearie"){ /* Erie Dearie class: weight-forward spinner */
+    el("ellipse", { cx: 0, cy: -13, rx: 4.6, ry: 7.6, fill: "hsla(46,80%,60%,1)", transform: "rotate(10)" }, g);
+    el("path", { d: "M-3 -5 Q0 -8.4 3 -5 L4.4 6 Q4.4 12 0 13.4 Q-4.4 12 -4.4 6 Z",
+      fill: "hsla(210,12%,60%,1)", stroke: "hsla(210,10%,34%,1)", "stroke-width": 1.1 }, g); /* lead head/body */
+    el("path", { d: "M0 13.4 Q3 17 1.6 21 M0 13.4 Q-3 17 -1.6 21 M0 13.4 L0 22", fill: "none",
+      stroke: "#cfd8dc", "stroke-width": 1.2, "stroke-linecap": "round" }, g); /* hook points */
+  } else if(kind === "squid"){ /* marlin squid: mantle, skirt, big eyes */
+    el("path", { d: "M0 -18 Q5.4 -10 4.6 -1 L-4.6 -1 Q-5.4 -10 0 -18 Z",
+      fill: "hsla(320,44%,62%,1)", stroke: "hsla(320,40%,34%,1)", "stroke-width": 1.1 }, g);
+    for(var sq = -3; sq <= 3; sq++)
+      el("path", { d: "M" + (sq*1.5) + " 0 Q" + (sq*2.1) + " 10 " + (sq*1.7) + " 19", fill: "none",
+        stroke: "hsla(320,44%,52%,0.9)", "stroke-width": 1.7, "stroke-linecap": "round" }, g);
+    el("circle", { cx: -2.6, cy: -5.4, r: 1.7, fill: "#12060e" }, g);
+    el("circle", { cx: 2.6, cy: -5.4, r: 1.7, fill: "#12060e" }, g);
+  } else if(kind === "shadrap"){ /* Shad Rap class: deep shad-body crank */
+    el("path", { d: "M0 -16 Q8 -10 8.6 2 Q8.6 12 0 17 Q-8.6 12 -8.6 2 Q-8 -10 0 -16 Z",
+      fill: "hsla(210,22%,58%,1)", stroke: "hsla(210,24%,28%,1)", "stroke-width": 1.2 }, g);
+    el("path", { d: "M0 -16 Q8 -10 8.6 2 L-8.6 2 Q-8 -10 0 -16 Z", fill: "hsla(200,30%,34%,1)" }, g);
+    el("path", { d: "M-8.8 5 Q0 8.6 8.8 5 L7.2 10.6 Q0 12.6 -7.2 10.6 Z", fill: "hsla(0,0%,88%,0.92)" }, g); /* lip */
+    el("circle", { cx: -3.4, cy: -8, r: 2.4, fill: "hsla(220,20%,16%,0.85)" }, g); /* shad spot */
+    el("circle", { cx: -2.2, cy: -11, r: 1.5, fill: "#14100c" }, g);
+    el("circle", { cx: 2.2, cy: -11, r: 1.5, fill: "#14100c" }, g);
+    treble(0, 3, 1); treble(0, 13, 1);
+  } else if(kind === "tube"){ /* tube jig, craw class: head + tentacle skirt */
+    el("path", { d: "M-3.4 -14 Q0 -17 3.4 -14 L3 2 Q0 4 -3 2 Z",
+      fill: "hsla(24,44%,34%,1)", stroke: "hsla(22,42%,20%,1)", "stroke-width": 1.1 }, g); /* tube body */
+    el("circle", { cx: 0, cy: -15.4, r: 3.1, fill: "hsla(210,10%,30%,1)" }, g);          /* jig head */
+    el("circle", { cx: -1.2, cy: -12.4, r: 1.2, fill: "#14100c" }, g);
+    for(var tn = -3; tn <= 3; tn++)
+      el("path", { d: "M" + (tn * 0.95) + " 3 Q" + (tn * 1.7) + " 10 " + (tn * 1.35) + " 17", fill: "none",
+        stroke: "hsla(24,44%,30%,0.95)", "stroke-width": 1.6, "stroke-linecap": "round" }, g); /* tentacles */
+    el("path", { d: "M-3 6 Q-6.4 9 -6 13 M3 6 Q6.4 9 6 13", fill: "none",
+      stroke: "hsla(18,52%,36%,1)", "stroke-width": 2.2, "stroke-linecap": "round" }, g); /* craw claws */
+  } else { /* dardevle-style spoon default */
+    el("path", { d: "M0 -16 Q7 -6 6 6 Q5 15 0 18 Q-5 15 -6 6 Q-7 -6 0 -16 Z",
+      fill: "hsla(0,66%,46%,1)", stroke: "hsla(0,55%,26%,1)", "stroke-width": 1.2 }, g);
+    el("path", { d: "M-6 -2 L6 -4 L6 3 L-6 5 Z", fill: "hsla(0,0%,94%,1)" }, g); /* the red/white */
+    treble(0, 17, 1.05);
+  }
+  return g;
+}
+
+/* ================= the front-facing fish (pose frames) ============= */
+/* POSE FRAMES (owner, Nov 22): the strike is a pose sequence with
+   natural, species-true outlines — the SWALLOW (front-facing, mouth
+   open, the bait going in), the MONEY SHOT (front-facing, mouth open,
+   eyes wild, the lure visibly hooked in its mouth at the moment the
+   set lands), then the side-arc ERUPTION and DIVE the drawFish poses
+   already carry. The front head is built per strike from the pending
+   catch's own rolled colours, so the face that swallows your lure is
+   the fish you are about to fight. */
+var FRONT = null;
+function drawFishFront(parent, C){
+  var F = CFG.fish;
+  var g = el("g", {}, parent);
+  var head = el("g", {}, g);
+  var defs = el("defs", {}, head);
+  var fg = el("linearGradient", { id: "frontGrad", x1: "0", y1: "0", x2: "0", y2: "1" }, defs);
+  el("stop", { offset: "0%", "stop-color": hsl(C.back) }, fg);
+  el("stop", { offset: "55%", "stop-color": hsl(C.flank) }, fg);
+  el("stop", { offset: "100%", "stop-color": hsl(C.belly) }, fg);
+  /* head outline — a fish coming straight at you */
+  el("path", { d: "M-58 -6 Q-62 -50 0 -57 Q62 -50 58 -6 Q55 32 31 47 Q0 59 -31 47 Q-55 32 -58 -6 Z",
+    fill: "url(#frontGrad)", stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-10)}), "stroke-width": 2.4 }, head);
+  el("ellipse", { cx: 0, cy: -34, rx: 34, ry: 15, fill: hsl({h:C.back.h, s:C.back.s, l:C.back.l+8}, 0.5) }, head);
+  /* species marks on the forehead */
+  var r = RNG(C.patSeed + 5);
+  if(F.pattern === "speckle" || F.pattern === "spots"){
+    for(var i = 0; i < 16; i++)
+      el("circle", { cx: (-40 + r() * 80).toFixed(1), cy: (-48 + r() * 30).toFixed(1), r: (1.3 + r() * 1.6).toFixed(1),
+        fill: hsl({h:C.back.h, s:C.back.s, l:Math.max(5, C.back.l-14)}, C.patA * 0.8) }, head);
+  } else if(F.pattern === "stripes"){
+    for(var s3 = -2; s3 <= 2; s3++)
+      el("path", { d: "M" + (s3 * 15) + " -52 Q" + (s3 * 16) + " -30 " + (s3 * 14) + " -12",
+        fill: "none", stroke: "hsla(222,80%,72%," + (C.patA * 0.75) + ")", "stroke-width": 3, "stroke-linecap": "round" }, head);
+  }
+  if(F.earflap){ /* bluegill ears, both sides of the head */
+    el("ellipse", { cx: -53, cy: -4, rx: 7, ry: 12, fill: "hsla(220,30%,10%,0.92)" }, head);
+    el("ellipse", { cx: 53, cy: -4, rx: 7, ry: 12, fill: "hsla(220,30%,10%,0.92)" }, head);
+  }
+  if(F.bill){ /* the bill, foreshortened — coming straight at the camera */
+    el("path", { d: "M-6 -8 L0 26 L6 -8 Q0 -3 -6 -8 Z", fill: hsl({h:C.back.h, s:C.back.s, l:C.back.l+6}),
+      stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-8)}), "stroke-width": 1 }, head);
+  }
+  /* gill arcs */
+  el("path", { d: "M-47 -22 Q-38 4 -44 30", fill: "none", stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-12)}, 0.65), "stroke-width": 1.8 }, head);
+  el("path", { d: "M47 -22 Q38 4 44 30", fill: "none", stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-12)}, 0.65), "stroke-width": 1.8 }, head);
+  /* pectoral fins, splayed */
+  el("path", { d: "M-52 22 Q-76 30 -72 46 Q-58 44 -50 34 Z", fill: hsl({h:C.flank.h, s:C.flank.s, l:C.flank.l-8}, 0.9) }, head);
+  el("path", { d: "M52 22 Q76 30 72 46 Q58 44 50 34 Z", fill: hsl({h:C.flank.h, s:C.flank.s, l:C.flank.l-8}, 0.9) }, head);
+  /* eyes — the wild set is one attribute away */
+  function eye(side){
+    var eg = el("g", { transform: "translate(" + (side * 31) + " -15)" }, head);
+    el("circle", { cx: 0, cy: 0, r: 10.5, fill: "#e6eedd", opacity: 0.92 }, eg);
+    el("circle", { cx: 0, cy: 0, r: 7.4, fill: "#0b0f0c" }, eg);
+    el("circle", { cx: -2.2, cy: -2.4, r: 2.1, fill: "#ffffff" }, eg);
+    return eg;
+  }
+  var eyeL = eye(-1), eyeR = eye(1);
+  var browL = el("path", { d: "M-42 -30 Q-31 -37 -20 -30", fill: "none", opacity: 0,
+    stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-16)}), "stroke-width": 2.6, "stroke-linecap": "round" }, head);
+  var browR = el("path", { d: "M20 -30 Q31 -37 42 -30", fill: "none", opacity: 0,
+    stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-16)}), "stroke-width": 2.6, "stroke-linecap": "round" }, head);
+  /* nostrils */
+  el("circle", { cx: -9, cy: 12, r: 1.7, fill: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-12)}, 0.8) }, head);
+  el("circle", { cx: 9, cy: 12, r: 1.7, fill: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-12)}, 0.8) }, head);
+  /* the mouth: interior + lower jaw; openness is driven per frame */
+  var mouthIn = el("ellipse", { cx: 0, cy: 27, rx: 29, ry: 3, fill: "#3d0a08" }, head);
+  el("ellipse", { cx: 0, cy: 29, rx: 17, ry: 2, fill: "#200505" }, head);
+  var jaw = el("g", {}, head);
+  el("path", { d: "M-27 30 Q0 50 27 30 Q0 41 -27 30 Z", fill: hsl({h:C.belly.h, s:C.belly.s, l:Math.max(30, C.belly.l-14)}),
+    stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-12)}), "stroke-width": 1.2 }, jaw);
+  el("path", { d: "M-29 24 Q0 36 29 24", fill: "none", stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-14)}), "stroke-width": 2 }, head);
+  /* the incoming lure (swallow pose) — dives from above into the mouth */
+  var inLure = el("g", { opacity: 0 }, g);
+  drawLure(inLure, CFG.lureKind, 7);
+  /* the lure IN the mouth (chomp + close beats) — centre-mouth, deep */
+  var throatLure = el("g", { opacity: 0, transform: "translate(0 33) scale(0.8)" }, head);
+  drawLure(throatLure, CFG.lureKind, 7);
+  /* TEETH — built only for the toothed class (pike, muskie, walleye):
+     an upper row hanging off the mouth roof, a lower row on the jaw.
+     The gnash is the jaw's work; the teeth just have to be THERE. */
+  var teethG = null;
+  if(F.closeFrame === "teeth"){
+    teethG = el("g", { opacity: 0 }, head);
+    var tx2, tw = 46;
+    for(tx2 = -tw; tx2 <= tw; tx2 += 7.5){
+      var th2 = 5 + 3.5 * (1 - Math.abs(tx2) / (tw + 6));
+      el("path", { d: "M" + tx2.toFixed(1) + " 23 L" + (tx2 + 3).toFixed(1) + " " + (23 + th2).toFixed(1) +
+                      " L" + (tx2 + 6).toFixed(1) + " 23 Z", fill: "#e8e4d2", opacity: 0.95 }, teethG);
+    }
+    var teethLow = el("g", {}, teethG);
+    for(tx2 = -tw + 3; tx2 <= tw - 3; tx2 += 8.5){
+      var th3 = 4 + 2.6 * (1 - Math.abs(tx2) / (tw + 6));
+      el("path", { d: "M" + tx2.toFixed(1) + " 40 L" + (tx2 + 2.6).toFixed(1) + " " + (40 - th3).toFixed(1) +
+                      " L" + (tx2 + 5.2).toFixed(1) + " 40 Z", fill: "#ded9c6", opacity: 0.9 }, teethLow);
+    }
+    teethG._low = teethLow;
+  }
+  /* gill flares — the toothless close frame's moving part: the gill
+     plates bell out as the fish works the lure down its throat */
+  var gillFlare = el("g", { opacity: 0 }, head);
+  el("path", { d: "M-52 -24 Q-64 4 -56 34", fill: "none", stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-8)}, 0.9), "stroke-width": 3 }, gillFlare);
+  el("path", { d: "M52 -24 Q64 4 56 34", fill: "none", stroke: hsl({h:C.back.h, s:C.back.s, l:Math.max(6, C.back.l-8)}, 0.9), "stroke-width": 3 }, gillFlare);
+  /* the hooked lure (money shot) — hung in the corner of the mouth,
+     hook curve showing against the lip */
+  var hookLure = el("g", { opacity: 0, transform: "translate(24 30) rotate(28) scale(0.72)" }, head);
+  drawLure(hookLure, CFG.lureKind, 7);
+  el("path", { d: "M14 22 Q26 30 24 40", fill: "none", stroke: "#cfd8dc", "stroke-width": 1.6 }, head)
+    .setAttribute("opacity", "0");   /* hook glint — lit at the set */
+  var hookGlint = head.lastChild;
+  return { g: g, head: head, mouthIn: mouthIn, jaw: jaw, eyeL: eyeL, eyeR: eyeR,
+           browL: browL, browR: browR, inLure: inLure, hookLure: hookLure, hookGlint: hookGlint,
+           throatLure: throatLure, teethG: teethG, gillFlare: gillFlare };
+}
+function frontPose(scale, x, y, open, wild){
+  if(!FRONT) return;
+  FRONT.g.setAttribute("transform", "translate(" + x + " " + y + ") scale(" + scale + ")");
+  FRONT.mouthIn.setAttribute("ry", (3 + 15 * open).toFixed(1));
+  FRONT.jaw.setAttribute("transform", "rotate(" + (open * 13).toFixed(1) + " 0 28)");
+  var es = wild ? 1.3 : 1;
+  FRONT.eyeL.setAttribute("transform", "translate(-31 -15) scale(" + es + ")");
+  FRONT.eyeR.setAttribute("transform", "translate(31 -15) scale(" + es + ")");
+  FRONT.browL.setAttribute("opacity", wild ? "0.9" : "0");
+  FRONT.browR.setAttribute("opacity", wild ? "0.9" : "0");
+  FRONT.hookGlint.setAttribute("opacity", wild ? "0.95" : "0");
+}
+
+/* ================= scenes =========================================== */
+var wallG = el("g", {}, svg);
+var lakeG = el("g", {}, svg);
+lakeG.setAttribute("opacity", "0");
+lakeG.setAttribute("pointer-events", "none");
+
+/* ---- trophy wall ---- */
+(function buildWall(){
+  var defs = el("defs", {}, wallG);
+  var wg = el("linearGradient", { id: "wood", x1: "0", y1: "0", x2: "0", y2: "1" }, defs);
+  el("stop", { offset: "0%", "stop-color": "#3a2417" }, wg);
+  el("stop", { offset: "100%", "stop-color": "#241408" }, wg);
+  el("rect", { x: 0, y: 0, width: 400, height: 400, fill: "url(#wood)" }, wallG);
+  for(var i = 0; i < 6; i++){
+    el("line", { x1: 0, y1: 66 + i * 56, x2: 400, y2: 66 + i * 56, stroke: "#170c04", "stroke-width": 2.4 }, wallG);
+    el("line", { x1: 0, y1: 68.5 + i * 56, x2: 400, y2: 68.5 + i * 56, stroke: "#54341d", "stroke-width": 1 }, wallG);
+  }
+  /* plaque */
+  el("rect", { x: 38, y: 44, width: 324, height: 148, rx: 16, fill: "#17100a",
+    stroke: "#8a6d1c", "stroke-width": 3 }, wallG);
+  el("rect", { x: 46, y: 52, width: 308, height: 132, rx: 12, fill: "none",
+    stroke: "#c9a227", "stroke-width": 1.2, opacity: 0.65 }, wallG);
+  [[54,60],[346,60],[54,176],[346,176]].forEach(function(pt){
+    el("circle", { cx: pt[0], cy: pt[1], r: 3.4, fill: "#c9a227" }, wallG);
+  });
+  if(CFG.mi){ /* Michigan map backdrop in the plaque + run timeline (steelhead) */
+    var mi = el("g", { opacity: 0.17 }, wallG);
+    el("path", { d: "M96 218 L112 206 L132 202 L144 190 L150 202 L170 200 L188 206 L202 214 L198 228 L172 232 L132 232 L106 228 Z " +
+                     "M176 240 L168 256 L166 278 L172 306 L180 324 L204 324 L212 306 L210 290 L228 282 L234 270 L228 258 L214 262 L210 244 L196 236 L184 236 Z",
+      fill: "none", stroke: "#e8c85a", "stroke-width": 2.2, transform: "translate(24 -104) scale(0.88)" }, mi);
+    var months = ["J","F","M","A","M","J","J","A","S","O","N","D"];
+    var tl = el("g", {}, wallG);
+    txt(tl, 52, 262, "RUN", { fill: "#9db8a8", "font-size": 9, "letter-spacing": ".18em",
+      "font-family": "ui-monospace,Menlo,Consolas,monospace" });
+    for(var m = 0; m < 12; m++){
+      var inFall = (m >= 8), inSpring = (m >= 1 && m <= 4);
+      var peak = (m === 2 || m === 3 || m === 9 || m === 10);
+      el("rect", { x: 84 + m * 22, y: 250, width: 18, height: 12, rx: 2,
+        fill: peak ? "#e8c85a" : (inFall ? "#8a6d1c" : (inSpring ? "#4c7a52" : "#2a2016")),
+        opacity: (inFall || inSpring) ? 0.95 : 0.6 }, tl);
+      txt(tl, 93 + m * 22, 274, months[m], { fill: "#9db8a8", "font-size": 8.5, "text-anchor": "middle",
+        "font-family": "ui-monospace,Menlo,Consolas,monospace" });
+    }
+    var nowM = new Date().getMonth();
+    el("path", { d: "M" + (93 + nowM * 22) + " 244 l5 6 h-10 Z", fill: "#ffb52e" }, tl);
+    txt(tl, 200, 291, "FALL + SPRING RUNS", { fill: "#9db8a8", "font-size": 9, "text-anchor": "middle",
+      "letter-spacing": ".12em", "font-family": "ui-monospace,Menlo,Consolas,monospace" });
+  }
+})();
+var mountG = el("g", { transform: "translate(200 112)" }, wallG);
+var mountCap = txt(wallG, 200, 210, "", { fill: "#e8c85a", "font-size": 13.5, "text-anchor": "middle",
+  "letter-spacing": ".14em", "font-weight": 700, "font-family": "ui-monospace,Menlo,Consolas,monospace" });
+var mountSub = txt(wallG, 200, 228, "", { fill: "#9db8a8", "font-size": 10, "text-anchor": "middle",
+  "letter-spacing": ".16em", "font-family": "ui-monospace,Menlo,Consolas,monospace" });
+function paintMount(C, whenStr){
+  while(mountG.firstChild) mountG.removeChild(mountG.firstChild);
+  drawFish(mountG, C, CFG.fish.bill ? 172 : 218, { plate: true });
+  mountCap.textContent = CFG.fish.name.toUpperCase() + " — " + C.lenIn.toFixed(1) + " " + (CFG.fish.unit || "IN") + " · " + C.lbs.toFixed(1) + " LB" +
+    (C.ageClass === "dinosaur" ? " · DINOSAUR CLASS" : (C.ageClass === "old" ? " · OLD GROWTH" : ""));
+  mountSub.textContent = whenStr || "";
+}
+
+/* ---- the lake ---- */
+var bobberG, lureG, linePath, shadowG, leapG, splashG, meterG, meterFill, progFill, spoolG, spoolRing, frontG;
+(function buildLake(){
+  /* v1.1: the lake's depth is the PLATE STACK now (sky / treeline /
+     water / flow / scrim / reeds / shimmer / vignette are painted
+     plates in #platesBelow + #platesAbove). The SVG carries only the
+     subject + function plates: shadow, splashes, the fish, the line,
+     bobber, lure, tension meter, finger spool. */
+  shadowG = el("g", { opacity: 0 }, lakeG);
+  var shC = { back: {h:200,s:20,l:10}, flank: {h:200,s:18,l:13}, belly: {h:200,s:16,l:18}, patA: 0, patSeed: 5 };
+  var shInner = el("g", { transform: "translate(200 268) scale(1 1)", opacity: 0.5 }, shadowG);
+  drawFish(shInner, shC, 150, {});
+  shInner.setAttribute("filter", ""); /* silhouette reads by colour alone */
+  splashG = el("g", {}, lakeG);
+  leapG = el("g", { opacity: 0 }, lakeG);
+  frontG = el("g", { opacity: 0 }, lakeG);
+  linePath = el("path", { d: "", fill: "none", stroke: "hsla(0,0%,100%,0.55)", "stroke-width": 1.2 }, lakeG);
+  bobberG = el("g", {}, lakeG);
+  el("path", { d: "M-7 0 A7 7 0 0 1 7 0 Z", fill: "#e8e4da" }, bobberG);
+  el("path", { d: "M-7 0 A7 7 0 0 0 7 0 Z", fill: "#d8402e" }, bobberG);
+  el("line", { x1: 0, y1: -9, x2: 0, y2: -3, stroke: "#e8e4da", "stroke-width": 2 }, bobberG);
+  el("circle", { cx: 0, cy: -10, r: 2.2, fill: "#d8402e" }, bobberG);
+  lureG = el("g", {}, lakeG);
+  drawLure(lureG, CFG.lureKind, 7);
+  meterG = el("g", { opacity: 0 }, lakeG);
+  el("rect", { x: 366, y: 140, width: 14, height: 170, rx: 6, fill: "hsla(0,0%,0%,0.45)",
+    stroke: "hsla(0,0%,100%,0.35)", "stroke-width": 1 }, meterG);
+  el("rect", { x: 366, y: 176, width: 14, height: 84, fill: "hsla(130,60%,46%,0.30)" }, meterG); /* the zone */
+  meterFill = el("rect", { x: 368.5, y: 306, width: 9, height: 0, fill: "#ffc44d" }, meterG);
+  txt(meterG, 373, 132, "TENSION", { fill: "#eaf6ef", "font-size": 8.5, "text-anchor": "middle",
+    "letter-spacing": ".1em", "font-family": "ui-monospace,Menlo,Consolas,monospace" });
+  /* THE FISH METER (v1.1): the owner's meter — it rises per stroke
+     and drains as the fish works; the red band at the bottom is the
+     slip zone, where the hook starts coming loose. */
+  el("rect", { x: 28, y: 126, width: 304, height: 8, rx: 4, fill: "hsla(0,0%,0%,0.45)",
+    stroke: "hsla(0,0%,100%,0.3)", "stroke-width": 1 }, meterG);
+  el("rect", { x: 28, y: 126, width: 91, height: 8, fill: "hsla(0,70%,50%,0.28)" }, meterG);
+  progFill = el("rect", { x: 30, y: 128, width: 0, height: 4.5, rx: 2, fill: "#5ee07d" }, meterG);
+  txt(meterG, 28, 120, "FISH", { fill: "#eaf6ef", "font-size": 8.5,
+    "letter-spacing": ".12em", "font-family": "ui-monospace,Menlo,Consolas,monospace" });
+  /* THE FINGER-SPOOL: an open-face reel in the corner. Your finger is
+     the spool — hold it and stroke to reel; the fish's wiggle comes
+     back through it as vibration; lift off and the line goes slack. */
+  spoolG = el("g", { opacity: 0 }, lakeG);
+  spoolRing = el("circle", { cx: 342, cy: 322, r: 31, fill: "hsla(0,0%,0%,0.42)",
+    stroke: "hsla(0,0%,100%,0.5)", "stroke-width": 2, "stroke-dasharray": "5 4" }, spoolG);
+  el("circle", { cx: 342, cy: 322, r: 19, fill: "none", stroke: "#e8c85a", "stroke-width": 3 }, spoolG);
+  el("circle", { cx: 342, cy: 322, r: 4.5, fill: "#e8c85a" }, spoolG);
+  el("circle", { cx: 342, cy: 306, r: 4, fill: "#eaf6ef" }, spoolG);   /* handle knob */
+  txt(spoolG, 342, 368, "FINGER SPOOL", { fill: "#eaf6ef", "font-size": 8.5, "text-anchor": "middle",
+    "letter-spacing": ".12em", "font-family": "ui-monospace,Menlo,Consolas,monospace" });
+})();
+
+/* ================= the cast scene (owner redesign, Nov 22) ==========
+   First-person cast presentation as SINGLE FRAMES, frame-traded:
+   people stand on EITHER SIDE of the cast space and some of them CAN
+   GET HOOKED — the safety protocol is mechanical, not decorative.
+   Every overlay here is a MEASURED CUT-OUT (vector contours with
+   recorded bounding boxes, audited in verify/cast_measure.js) —
+   no scrim blanket hides between layers, ever. */
+var crowdG, aimG, rodG, bankFG, hatL = null, hatR = null, yelpEl = null;
+var FOUL_ZONES = [ { x0: 36, x1: 94 }, { x0: 306, x1: 364 } ];
+function buildFigure(parent, x, flip, bodyFill, hatFill){
+  /* local coords: feet at y=118, head at y~9; the group transform
+     scales the figure onto the far bank (0.55) about its feet —
+     world height ~60, heads in the treeline band. */
+  var g = el("g", { transform: "translate(" + x + " 118) scale(" + (flip * 0.55) + " 0.55) translate(0 -118)" }, parent);
+  /* the angler — one contour: boots, legs, torso, arms, head.
+     bbox: x -13..13, y 14..118 (feet on the bank line). */
+  el("path", { d: "M-11 118 L-8.5 82 L-6 58 L-10 44 Q-12 38 -7 36 L-5.5 52 L-4 34 " +
+                   "Q-4 25 0 25 Q4 25 4 34 L5 54 Q10 60 9 78 L11 118 L4.5 118 L1.5 88 " +
+                   "L-1.5 88 L-4.5 118 Z", fill: bodyFill }, g);
+  el("circle", { cx: 0, cy: 17, r: 8.2, fill: bodyFill }, g);
+  /* a rod in the far hand, angled up over the water */
+  el("path", { d: "M7 40 L30 6", stroke: bodyFill, "stroke-width": 2.6, "stroke-linecap": "round" }, g);
+  /* the hat — its OWN cut-out, because the foul can take it */
+  var hat = el("g", {}, g);
+  el("path", { d: "M-13.5 13.5 L13.5 13.5 L8.5 5.5 Q0 1.5 -8.5 5.5 Z", fill: hatFill }, hat);
+  hat._flip = flip;
+  return hat;
+}
+(function buildCastScene(){
+  crowdG = el("g", { opacity: 0, id: "castCrowd" }, lakeG);
+  hatL = buildFigure(crowdG, 64, 1, "#20362a", "#c9a227");
+  hatR = buildFigure(crowdG, 336, -1, "#2a3040", "#b0502e");
+  crowdG.children[0].setAttribute("id", "castFigL");
+  crowdG.children[1].setAttribute("id", "castFigR");
+  hatL.setAttribute("id", "castHatL"); hatR.setAttribute("id", "castHatR");
+  yelpEl = txt(crowdG, 64, 40, "YELP!", { fill: "#ffd75e", "font-size": 15, "font-weight": 800,
+    "text-anchor": "middle", opacity: 0, "font-family": "ui-monospace,Menlo,Consolas,monospace" });
+  lakeG.insertBefore(crowdG, leapG);            /* people stand IN the scene, behind the fish */
+  /* the near bank — the foreground the player stands on. A wavy
+     measured contour across the bottom (bbox y 338..400), with reed
+     clumps at the edges. A cut-out, not a blanket. */
+  bankFG = el("g", { opacity: 0, id: "castBank" }, lakeG);
+  el("path", { d: "M0 400 L0 360 Q52 346 104 356 Q160 366 226 354 Q292 344 400 360 L400 400 Z",
+    fill: "#14251a" }, bankFG);
+  el("path", { d: "M14 362 Q10 338 18 330 Q20 344 24 356 Q28 340 34 334 Q32 350 36 360 Z", fill: "#1d3a26" }, bankFG);
+  el("path", { d: "M366 362 Q364 342 372 332 Q376 346 380 358 Q384 344 390 338 Q388 352 392 362 Z", fill: "#1d3a26" }, bankFG);
+  lakeG.insertBefore(bankFG, meterG);
+  /* the player's rod — first person, butt at the bottom edge */
+  rodG = el("g", { opacity: 0, id: "castRod" }, lakeG);
+  el("path", { d: "M188 402 Q196 356 206 318 L258 268", fill: "none", stroke: "#3a2417",
+    "stroke-width": 5, "stroke-linecap": "round" }, rodG);
+  el("path", { d: "M188 402 Q196 356 206 318 L258 268", fill: "none", stroke: "#6a4a2a",
+    "stroke-width": 2, "stroke-linecap": "round" }, rodG);
+  lakeG.insertBefore(rodG, meterG);
+  /* the aim arrow — a ring + chevron riding the surface line */
+  aimG = el("g", { opacity: 0, id: "castAim" }, lakeG);
+  el("ellipse", { cx: 0, cy: 120, rx: 17, ry: 5, fill: "none", stroke: "#ffd75e", "stroke-width": 2 }, aimG);
+  el("path", { d: "M-9 96 L0 106 L9 96 L9 103 L0 113 L-9 103 Z", fill: "#ffd75e" }, aimG);
+  lakeG.insertBefore(aimG, meterG);
+})();
+var spotX = 200, arrowX = 200, aimT = 0, foulT = 0, foulHat = null, foulSide = 1;
+
+/* ================= the game ========================================= */
+var statusEl = document.getElementById("statusLine");
+var hintEl = document.getElementById("hintLine");
+var plateEl = document.getElementById("calloutPlate");
+var dnrChip = document.getElementById("dnrChip");
+/* one shout, one row: shrink the line until it fits its row — a
+   callout never wraps, never clips, never sits on its neighbour */
+function fitLine(elm, base){
+  elm.style.fontSize = "";
+  if(!elm.textContent) return;
+  var size = base, guard = 0;
+  while(elm.scrollWidth > elm.clientWidth && size > 1.55 && guard++ < 24){
+    size -= 0.15;
+    elm.style.fontSize = "calc(var(--u,1vmin)*" + size.toFixed(2) + ")";
+  }
+}
+function fitCallouts(){
+  plateEl.style.display = (statusEl.textContent || hintEl.textContent) ? "block" : "none";
+  fitLine(statusEl, 3.05);
+  fitLine(hintEl, 2.25);
+}
+function setStatus(s){ statusEl.textContent = s || ""; fitCallouts(); }
+function setHint(s){ hintEl.textContent = s || ""; fitCallouts(); }
+window.addEventListener("resize", function(){ fitCallouts(); });
+
+var LSKEY = "apex-fishing-" + CFG.slug;
+var mount = null, mountWhen = "";
+try {
+  var saved = JSON.parse(localStorage.getItem(LSKEY) || "null");
+  if(saved && saved.seed){ mount = rollCatch(saved.seed); mountWhen = saved.when || ""; }
+} catch(e){}
+if(!mount){ mount = rollCatch(20261122); mountWhen = "HOUSE MOUNT — CAST TO TOP IT"; }
+paintMount(mount, mountWhen);
+if(CFG.mi) dnrChip.style.display = "block";
+
+var game = "wall";           /* wall | castanim | settle | wait | strike | fight | landing | escape | landed | lost */
+var pending = null;          /* the catch being fought */
+var waitMs = 0, workGlow = 0, shadowX = -220, shadowDir = 1, shadowOn = false;
+var strikeT = 0, endT = 0, castT = 0, settleT = 0;
+/* strike pose sequence (v1.1): swallow -> setwindow -> erupt | spit.
+   THE HOOK SET (owner): no set, no fish — the set window is a gate,
+   and an unset strike never reaches the tension phase. */
+var strikePhase = "", phaseT = 0, setDone = false;
+/* fight (v1.1 retune): a 10-60 s struggle on a phase script.
+   PEDAL against the drain -> SLIP event (the big drop) -> JERK to
+   re-set (a VELOCITY CATCH — pressure alone never re-seats) -> PEDAL
+   again. A fully bottomed meter is the hook pulled: fish gone. */
+var tension = 0, progress = 0, fightMs = 0, surgeT = 0, surging = 0, slackMs = 0, tire = 1;
+var plan = null;             /* per-fight: {T, drainBase, dropTarget, b:[phase bounds]} */
+var phaseName = "", hookState = "seated";   /* seated | slipping | loose */
+var resetWinT = 0, resetDone = false, finalSlipDone = false, bottomMs = 0, slipTarget = 20, snapMs = 0;
+var fishX = 200, fishDir = 1;
+var resting = false, restCalled = false, buzzT = 0;
+var stageEl = document.getElementById("stage");
+function stageZoom(z){ stageEl.style.transform = "scale(" + z + ")"; }
+/* ---- vibration: a SETTING, default ON (owner, Nov 22) --------------
+   The player owns the haptics — battery respect. The toggle chip on
+   the face flips it; the choice persists; buzz() honours it at every
+   site vibration would fire. Audio (the FISH ON beep-beep) is not
+   vibration and is not gated by this switch. */
+var vibeOn = true;
+try { vibeOn = localStorage.getItem("apex-fishing-vibe") !== "off"; } catch(e){}
+var vibeChip = document.getElementById("vibeChip");
+function paintVibe(){ vibeChip.textContent = vibeOn ? "VIBE ON" : "VIBE OFF"; }
+paintVibe();
+vibeChip.addEventListener("pointerdown", function(ev){
+  ev.stopPropagation();
+  vibeOn = !vibeOn;
+  try { localStorage.setItem("apex-fishing-vibe", vibeOn ? "on" : "off"); } catch(e){}
+  paintVibe();
+  if(vibeOn) buzz(50);            /* the switch proves itself when it turns on */
+}, true);
+function buzz(p){ if(!vibeOn) return; try { if(navigator.vibrate) navigator.vibrate(p); } catch(e){} }
+/* ---- the FISH ON beep-beep: two short WebAudio chirps --------------- */
+var AC = null;
+function beepBeep(){
+  try {
+    if(!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+    if(AC.state === "suspended") AC.resume();
+    var t0 = AC.currentTime;
+    [[988, 0], [1319, 0.13]].forEach(function(b){
+      var o = AC.createOscillator(), g = AC.createGain();
+      o.type = "square"; o.frequency.value = b[0];
+      g.gain.setValueAtTime(0.0001, t0 + b[1]);
+      g.gain.exponentialRampToValueAtTime(0.12, t0 + b[1] + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + b[1] + 0.1);
+      o.connect(g); g.connect(AC.destination);
+      o.start(t0 + b[1]); o.stop(t0 + b[1] + 0.11);
+    });
+  } catch(e){}
+}
+/* ---- FISH ON! flash ------------------------------------------------- */
+var fishOnEl = document.getElementById("fishOn");
+var fishOnT = -1;
+function fishOnFlash(){ fishOnT = 0; }
+var leapInner = null, leapMouth = null, ripples = [];
+var pedalBank = 0;   /* pedals banked through the set show (owner: the pedal never pauses) */
+for(var ri = 0; ri < 3; ri++){
+  var rc = el("circle", { cx: 200, cy: 119, r: 6, fill: "none",
+    stroke: "hsla(0,0%,100%,0.4)", "stroke-width": 1.2 }, lakeG);
+  ripples.push({ c: rc, ph: ri / 3 });
+}
+var platesBelowEl = document.getElementById("platesBelow");
+var platesAboveEl = document.getElementById("platesAbove");
+function showScene(lake){
+  wallG.setAttribute("opacity", lake ? "0" : "1");
+  wallG.setAttribute("pointer-events", lake ? "none" : "auto");
+  lakeG.setAttribute("opacity", lake ? "1" : "0");
+  lakeG.setAttribute("pointer-events", lake ? "auto" : "none");
+  platesBelowEl.style.display = lake ? "block" : "none";
+  platesAboveEl.style.display = lake ? "block" : "none";
+  if(CFG.mi) dnrChip.style.display = lake ? "none" : "block";
+  document.getElementById("readPanel").style.opacity = lake ? "0.92" : "1";
+}
+showScene(false);   /* boot on the wall — plates hidden with the lake */
+
+/* ============ frame trading (plate motion doctrine) ================= */
+/* The stack's only ambient motion: a couple of frames, slow-faded and
+   traded while the face is OBSERVED — setInterval steps, never a
+   continuous loop. Reeds sway A<->B on a 3.4 s step; the shimmer field
+   flips A/B on a 2.6 s step (rest levels 0.85 / 0.15, SPEC §C).
+   Timers exist only while observed; REST freezes the stack. */
+var reedA = document.querySelector(".pl-reed-a"), reedB = document.querySelector(".pl-reed-b");
+var shimA = document.querySelector(".pl-shim-a"), shimB = document.querySelector(".pl-shim-b");
+var reedFlip = false, shimFlip = false, tradeTimers = [];
+function tradeStep(kind){
+  if(kind === "shim"){
+    shimFlip = !shimFlip;
+    if(shimA) shimA.style.opacity = shimFlip ? "0.15" : "0.85";
+    if(shimB) shimB.style.opacity = shimFlip ? "0.85" : "0.15";
+  } else {
+    reedFlip = !reedFlip;
+    if(reedA) reedA.style.opacity = reedFlip ? "0" : "1";
+    if(reedB) reedB.style.opacity = reedFlip ? "1" : "0";
+  }
+}
+function armTrades(){
+  if(tradeTimers.length) return;
+  if(shimA) shimA.style.opacity = "0.85";
+  if(shimB) shimB.style.opacity = "0.15";
+  tradeTimers.push(setInterval(function(){ tradeStep("shim"); }, 2600));
+  tradeTimers.push(setInterval(function(){ tradeStep("reed"); }, 3400));
+}
+function clearTrades(){
+  for(var i = 0; i < tradeTimers.length; i++) clearInterval(tradeTimers[i]);
+  tradeTimers = [];
+}
+function cast(){
+  pending = rollCatch((Date.now() % 2147483647) | 1);
+  game = "aim"; aimT = 0; arrowX = 200; spotX = 200;
+  workGlow = 0; shadowOn = false; shadowX = -220;
+  showScene(true);
+  crowdG.setAttribute("opacity", "1");         /* the people are THERE — see them */
+  aimG.setAttribute("opacity", "1");
+  rodG.setAttribute("opacity", "1");
+  bankFG.setAttribute("opacity", "1");
+  for(var ri = 0; ri < ripples.length; ri++) ripples[ri].c.setAttribute("opacity", "0");
+  lureG.setAttribute("opacity", "0");
+  bobberG.setAttribute("opacity", "0");
+  setStatus("CHOOSE YOUR CAST — MIND THE PEOPLE"); setHint("TAP A SPOT · OR TAP LOW TO TAKE THE ARROW");
+  observe("cast");
+}
+/* THE CAST IS FIRED — the spot is judged the moment it is chosen.
+   A cast swung through a person is the foul the safety protocol
+   exists to prevent: the hook takes his hat, he yelps, the cast is
+   lost. Played in the cartoon register; the lesson is mechanical. */
+function fireCast(tx){
+  if(game !== "aim") return;
+  spotX = clamp(tx, 14, 386);
+  aimG.setAttribute("opacity", "0");
+  for(var i = 0; i < FOUL_ZONES.length; i++){
+    var z = FOUL_ZONES[i];
+    if(spotX >= z.x0 && spotX <= z.x1){
+      game = "foul"; foulT = 0;
+      foulSide = i === 0 ? -1 : 1;
+      foulHat = i === 0 ? hatL : hatR;
+      yelpEl.setAttribute("x", i === 0 ? 64 : 336);
+      buzz([200]);
+      setStatus("FOULED — YOU HOOKED YOUR BUDDY'S HAT!");
+      setHint("CHECK BEHIND YOU — NEVER CAST THROUGH A FRIEND");
+      return;
+    }
+  }
+  game = "castfly"; castT = 0;
+  lureG.setAttribute("opacity", "1");
+  setStatus(""); setHint("");
+}
+function startSettle(){
+  game = "settle"; settleT = 0;
+  crowdG.setAttribute("opacity", "0");         /* the camera leaves the bank */
+  rodG.setAttribute("opacity", "0");
+  bobberG.setAttribute("opacity", "1");
+  splash(spotX, 118, 18);                      /* THE PLUNK — at the chosen spot */
+  buzz(30);
+  setStatus(""); setHint("");
+}
+function startWait(){
+  game = "wait";
+  /* v1.1: the retrieve leg lengthens with the fight — an unhurried
+     soak/work rhythm (11-24 s unworked) before the eruption. Working
+     the lure still hurries it, just less cheaply than v1.0. */
+  waitMs = 11000 + Math.random() * 13000;
+  setStatus("BOBBER IN — " + CFG.fish.name.toUpperCase() + " WATER");
+  setHint("WORK THE " + CFG.lureShort.toUpperCase() + " — OR LET IT SOAK");
+}
+/* ---- the fight plan: duration + phase script, rolled per fish ---- */
+/* Durations by age class (owner's window: never under ~10 s, never
+   over ~60 s): young shortest, dinosaur longest. Phase bounds are
+   fractions of T with per-fish jitter, so no two fights keep the
+   same beat: opening run -> grind -> the HANG -> the CLIMB (false
+   summit) -> the DROP (a hook-slip) -> the final. */
+var CLASS_T = { young: [13000, 20000], prime: [26000, 40000],
+                old: [42000, 58000], dinosaur: [54000, 59000] };
+var CLASS_DRAIN = { young: 4.2, prime: 5.6, old: 6.6, dinosaur: 7.6 };
+function rollPlan(C){
+  var r = RNG(C.patSeed + 31);
+  var tr = CLASS_T[C.ageClass] || CLASS_T.prime;
+  var T = tr[0] + r() * (tr[1] - tr[0]);
+  function j(base){ return base * (0.88 + r() * 0.24); }
+  return {
+    T: T, drainBase: CLASS_DRAIN[C.ageClass] || CLASS_DRAIN.prime,
+    dropTarget: 12 + r() * 16,               /* the drop lands 12-28 */
+    b: [j(0.12), j(0.35), j(0.50), j(0.68), j(0.78)]
+  };
+}
+function phaseOf(){
+  if(!plan) return { name: "grind", drainMul: 1, gainMul: 1 };
+  var u = fightMs / plan.T, b = plan.b;
+  if(hookState === "loose") return { name: "loose", drainMul: 1.6, gainMul: 0.6 };
+  if(u < b[0]) return { name: "run", drainMul: 1.5, gainMul: 0.8 };
+  if(u < b[1]) return { name: "grind", drainMul: 1.0, gainMul: 1 };
+  if(u < b[2]) return { name: "hang", drainMul: 1.25, gainMul: 1 };
+  if(u < b[3]) return { name: "climb", drainMul: 0.4, gainMul: 1 };
+  if(u < b[4] || hookState === "slipping") return { name: "drop", drainMul: 5.0, gainMul: 0.12 };
+  return { name: "final", drainMul: Math.max(0.45, 1.3 - (u - b[4]) * 2.2), gainMul: 1 };
+}
+var PHASE_STATUS = {
+  run: "IT RUNS — LET IT TAKE LINE", grind: "WORK IT — KEEP PEDALING",
+  hang: "IT HANGS — DON'T LET UP", climb: "IT'S COMING — REEL!",
+  drop: "THE HOOK SLIPS — ", final: "IT'S TURNING — BRING IT HOME",
+  loose: "THE HOOK IS LOOSE — JERK TO RE-SET"
+};
+/* The fish gives ground BY PHASE: however hard you pedal, a fresh
+   fish will not come past the phase's line — it has to tire through
+   its phases. The ceilings are what make the 10-60 s window hold
+   for a strong player; the drain is what punishes a weak one. */
+var PHASE_CEIL = { run: 18, grind: 45, hang: 58, climb: 92, drop: 100, final: 100, loose: 100 };
+function startStrike(){
+  game = "strike"; strikeT = 0; phaseT = 0;
+  strikePhase = "swallow"; setDone = false;
+  pedalBank = 0;
+  buzz([40, 40, 90]);
+  lureG.setAttribute("opacity", "0");      /* the lure is in its mouth now */
+  while(leapG.firstChild) leapG.removeChild(leapG.firstChild);
+  leapInner = el("g", {}, leapG);
+  drawFish(leapInner, pending, 216, {});   /* the set show plays BIG; startFight redraws at fight size */
+  leapMouth = el("g", { opacity: 0, transform: "translate(-104 2) rotate(24) scale(0.8)" }, leapInner);
+  drawLure(leapMouth, CFG.lureKind, 7);    /* the lure at the lip for the spit-shake */
+  leapG.setAttribute("opacity", "0");      /* the leap waits for the set */
+  while(frontG.firstChild) frontG.removeChild(frontG.firstChild);
+  FRONT = drawFishFront(frontG, pending);
+  frontG.setAttribute("opacity", "1");
+  bankFG.setAttribute("opacity", "0");         /* the camera pushes in — the bank leaves frame */
+  splash(spotX, 118, 16);
+  setStatus(""); setHint("");
+}
+/* THE SET — one gate, every input class routes here. A catch in the
+   window seats the hook and the SET SHOW follows: FISH ON! flashes,
+   the beep-beep sounds, the wrist takes a hard burst (setting
+   permitting), and the pose set plays — airborne, spit-shake, chomp,
+   close frame — with the fish on screen in EVERY frame. The player
+   keeps pedaling through the show; the pedals bank into the fight. */
+function doSet(){
+  if(game !== "strike" || strikePhase !== "setwindow" || setDone) return;
+  setDone = true;
+  strikePhase = "setshow"; phaseT = 0;
+  buzz([120, 60, 200]);                    /* the hard burst — gated by the vibe setting */
+  beepBeep();                              /* beep beep */
+  fishOnFlash();                           /* FISH ON! */
+  setStatus("FISH ON!"); setHint("KEEP PEDALING — IT'S COMING UP");
+}
+function doSpit(){
+  strikePhase = "spit"; phaseT = 0;
+  buzz([90, 40, 60]);
+  setStatus("NO SET — IT THREW THE " + CFG.lureShort.toUpperCase()); setHint("");
+}
+/* THE RE-SET — a velocity catch while the hook slips (or hangs loose)
+   re-seats it. Pedaling can't; pressure can't; velocity does. */
+function doReset(){
+  if(game !== "fight") return;
+  if(hookState !== "slipping" && hookState !== "loose") return;
+  hookState = "seated"; resetDone = true; resetWinT = 0;
+  if(plan && phaseName === "drop")            /* a caught slip ends the drop */
+    fightMs = Math.max(fightMs, plan.b[4] * plan.T + 1);
+  progress = clamp(progress + 6, 0, 100);
+  buzz([30, 30, 110]);
+  setStatus("HOOK RE-SET — IT CAUGHT!"); setHint("");
+  if(progress >= 100) landFish();
+}
+function startFight(){
+  game = "fight";
+  /* the pedals the player banked through the set show are LIVE: the
+     fight opens with that ground already won and the line already
+     loaded — the presentation never paused the player's hands. */
+  tension = clamp(46 + pedalBank * 0.5, 46, 60);
+  progress = clamp(pedalBank, 0, 14);
+  pedalBank = 0;
+  fightMs = 0; surgeT = 700; surging = 0; slackMs = 0; tire = 1;
+  plan = rollPlan(pending);
+  phaseName = "run"; hookState = "seated";
+  resetWinT = 0; resetDone = false; finalSlipDone = false; bottomMs = 0; snapMs = 0;
+  fishX = 200; fishDir = 1;
+  frontG.setAttribute("opacity", "0");
+  while(leapG.firstChild) leapG.removeChild(leapG.firstChild);
+  leapInner = el("g", {}, leapG);
+  drawFish(leapInner, pending, 168, {});   /* fight size */
+  leapMouth = null;
+  leapG.setAttribute("opacity", "0.94");
+  resting = false; restCalled = false; spoolSlack = 0; spoolOn = false;
+  meterG.setAttribute("opacity", "1");
+  spoolG.setAttribute("opacity", "1");
+  bobberG.setAttribute("opacity", "0");
+  setStatus(CFG.fish.name.toUpperCase() + " ON — KEEP TENSION IN THE GREEN");
+  setHint("PEDAL THE SPOOL · STROKE TO REEL · POWER REEL WHEN IT RESTS");
+}
+/* THE LANDING (owner fix, Nov 24): progress full is not the end of
+   the fight — the fish comes UP. The haul drags it to the surface on
+   a line gone straight and tight; then it breaches and FLIES, spray
+   and rings running across the whole surface, and only then does
+   the wall take it. The payoff moment gets its show. The frame
+   branch for game === "landing" plays it; finishLanding() below is
+   the old instant landing, now the cinematic's last beat. */
+var landT = 0, landFrom = null, landBreachDone = false, ring2Done = false, ring3Done = false;
+function landFish(){
+  if(game !== "fight") return;
+  game = "landing"; landT = 0;
+  landBreachDone = false; ring2Done = false; ring3Done = false;
+  landFrom = { x: fishX, y: 232 + Math.sin(fightMs / 433) * 26 };
+  meterG.setAttribute("opacity", "0");
+  spoolG.setAttribute("opacity", "0"); spoolOn = false;
+  buzz([50, 40, 90]);
+  setStatus("IT'S UP — BRING IT HOME!"); setHint("");
+}
+function finishLanding(){
+  game = "landed"; endT = 0;
+  meterG.setAttribute("opacity", "0");
+  spoolG.setAttribute("opacity", "0"); spoolOn = false;
+  leapG.setAttribute("opacity", "0");
+  linePath.setAttribute("d", "");
+  buzz([60, 50, 130]);
+  mount = pending;
+  var d = new Date();
+  mountWhen = "LANDED " + ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][d.getMonth()] +
+              " " + d.getDate() + " · YOUR CATCH";
+  try { localStorage.setItem(LSKEY, JSON.stringify({ seed: mount.seed, when: mountWhen })); } catch(e){}
+  paintMount(mount, mountWhen);
+  /* the catch posts to the house board (shared container storage) */
+  try {
+    var board = JSON.parse(localStorage.getItem("apex-fishing-board-v1") || "[]");
+    board.push({ slug: CFG.slug, fish: CFG.fish.name, len: +mount.lenIn.toFixed(1),
+      unit: CFG.fish.unit || "IN", lbs: +mount.lbs.toFixed(1), age: mount.ageClass,
+      seed: mount.seed, when: new Date().toISOString() });
+    localStorage.setItem("apex-fishing-board-v1", JSON.stringify(board));
+  } catch(e){}
+  setStatus("LANDED! " + mount.lenIn.toFixed(1) + " " + (CFG.fish.unit || "IN") + " · " + mount.lbs.toFixed(1) + " LB — ON THE WALL");
+  setHint("");
+}
+/* THE ESCAPE, SEEN (owner fix, Nov 24): a lost fish is not a
+   vanished fish. Whatever took it — slack, a worked-loose hook, a
+   parted line, a thrown lure — the fish is SEEN leaving: for the
+   spit, a hard head-shake with the lure flying out of its mouth;
+   then a thrashing run for deep water, the line fallen slack
+   behind it. The frame branch for game === "escape" plays it. */
+var escT = 0, escKind = "", escFrom = null, escDir = 1, escLure = null, escLureT = -1;
+function loseFish(why, kind){
+  game = "escape"; escT = 0;
+  escKind = kind || "gone";
+  escFrom = { x: fishX, y: 232 + Math.sin(fightMs / 433) * 26 };
+  escDir = fishX >= 200 ? 1 : -1;          /* away from the middle, for the edge */
+  meterG.setAttribute("opacity", "0");
+  spoolG.setAttribute("opacity", "0"); spoolOn = false;
+  buzz([120, 40, 60]);
+  if(escKind === "spit"){
+    while(leapG.childNodes.length > 1) leapG.removeChild(leapG.lastChild);
+    escLure = el("g", { opacity: 0 }, leapG);
+    drawLure(escLure, CFG.lureKind, 7);    /* the lure, ready to be thrown */
+    escLureT = -1;
+    splash(fishX, 122, 10);
+  }
+  setStatus(why); setHint("");
+}
+function backToWall(){
+  game = "wall"; showScene(false);
+  stageZoom(1);
+  frontG.setAttribute("opacity", "0");
+  leapG.setAttribute("opacity", "0");
+  bobberG.setAttribute("opacity", "1");
+  lureG.setAttribute("opacity", "1");
+  setStatus(""); setHint("TAP TO CAST");
+}
+var splashPool = [];
+function splash(x, y, n){
+  for(var i = 0; i < n; i++){
+    var c = el("circle", { cx: x, cy: y, r: 1.6 + Math.random() * 1.8, fill: "hsla(0,0%,100%,0.85)" }, splashG);
+    splashPool.push({ c: c, x: x, y: y, vx: (Math.random() - 0.5) * 130, vy: -60 - Math.random() * 130, life: 0 });
+  }
+}
+/* expanding surface rings — the breach marker: an ellipse that runs
+   out across the water and fades, big for a landing, small for a
+   ripple. Animated in the same particle pass as the droplets. */
+var ringPool = [];
+function splashRing(x, y, big){
+  var e = el("ellipse", { cx: x, cy: y, rx: 6, ry: 2.2, fill: "none",
+    stroke: "hsla(0,0%,100%,0.75)", "stroke-width": big ? 2.2 : 1.4 }, splashG);
+  ringPool.push({ e: e, life: 0, dur: big ? 1150 : 800, max: big ? 190 : 90 });
+}
+/* ================= input: tap metrics + the finger-spool ============ */
+/* TAP METRICS (house input doctrine): the fight reads tap VELOCITY and
+   IMPACT INTENSITY, not tap count. Pressure comes from the pointer
+   where the hardware reports it; tempo stands in where it doesn't. */
+var tapLog = [];
+function noteTap(ev){
+  var now = Date.now();
+  tapLog.push({ t: now, p: (ev && ev.pressure) ? ev.pressure : 0.5 });
+  while(tapLog.length && now - tapLog[0].t > 900) tapLog.shift();
+}
+function tapMetrics(){
+  var now = Date.now(), n = 0, ps = 0;
+  for(var i = 0; i < tapLog.length; i++)
+    if(now - tapLog[i].t <= 900){ n++; ps += tapLog[i].p; }
+  return { vel: n, int: n ? ps / n : 0.5 };
+}
+function reelPower(){
+  var m = tapMetrics();
+  return clamp(0.7 + m.vel * 0.20 + m.int * 0.7, 0.7, 2.3);
+}
+function doReel(p){
+  if(game !== "fight") return;
+  var inZone = tension >= 18 && tension <= 86;
+  var mult = resting ? 1.5 : 1;               /* the power-reel window */
+  var ph = phaseOf();
+  /* PEDAL gains against the drain — phase-throttled (a running fish
+     gives almost nothing). And for old growth + dinosaurs the law is
+     absolute, in any phase: nothing past 92 until a re-set has
+     caught this fight. */
+  var gain = (inZone ? 1.15 : 0.5) * p * mult * ph.gainMul;
+  if((pending.ageClass === "old" || pending.ageClass === "dinosaur") && !resetDone)
+    gain = Math.min(gain, Math.max(0, 92 - progress));
+  progress += gain;
+  var ceil = PHASE_CEIL[ph.name];
+  if(ceil != null && progress > ceil) progress = ceil;
+  /* v1.1: the fish taxes tension (surges), not the reeling — and
+     during the RUN the drag slips: reeling against a running fish
+     adds only a drag fraction of its tension, so eagerness in the
+     run is futile (gainMul already says so) but not suicidal. */
+  tension = clamp(tension + 0.45 * p * (ph.name === "run" ? 0.4 : 1), 0, 104);
+  spoolRing.setAttribute("stroke", resting ? "#5ee07d" : "hsla(0,0%,100%,0.5)");
+  if(progress >= 100) landFish();
+}
+/* ============ THE VELOCITY CATCH — set / re-set input ============== */
+/* House tap-metrics doctrine: tap metrics denote VELOCITY and IMPACT
+   INTENSITY. The hook set and the mid-fight re-set both read a
+   velocity catch, per input class:
+     - MOTION: a wrist jerk / handset yank — a devicemotion spike
+       where the container exposes inertial input;
+     - FLICK: a sharp upward flick of the finger (pointer travel
+       velocity), the on-glass yank;
+     - SNATCH PAIR: two sharp taps in quick succession, the second
+       carrying effort (contact diameter — the thumbprint — or
+       pressure, where the hardware reports them).
+   A held press, however hard, has no velocity and catches NOTHING:
+   effort without the spike does not seat a hook. All classes route
+   to fireCatch(), which dispatches by game state. */
+var lastTapAt = 0, flickTrack = null, lastMotionFire = 0, lastAcc = null;
+function catchAttempt(ev){
+  var now = Date.now();
+  var effort = Math.max((ev && ev.pressure) || 0, ((ev && ev.width) || 0) / 26);
+  if(effort >= 0.8){ fireCatch(); lastTapAt = now; return; }   /* one genuinely hard snatch */
+  if(now - lastTapAt <= 260 && effort >= 0.55) fireCatch();
+  lastTapAt = now;
+}
+function fireCatch(){
+  if(game === "strike") doSet();
+  else if(game === "fight") doReset();
+}
+window.addEventListener("devicemotion", function(ev){
+  var a = ev && ev.accelerationIncludingGravity;
+  if(!a) return;
+  var m = Math.sqrt((a.x || 0) * (a.x || 0) + (a.y || 0) * (a.y || 0) + (a.z || 0) * (a.z || 0));
+  if(lastAcc != null && Math.abs(m - lastAcc) >= 13 && Date.now() - lastMotionFire > 500){
+    lastMotionFire = Date.now();
+    fireCatch();
+  }
+  lastAcc = m;
+});
+/* finger-spool state */
+var spoolOn = false, spoolSlack = 0, spoolLast = null, spoolAngle = 0;
+var svgPt = svg.createSVGPoint();
+function toSVG(ev){
+  svgPt.x = ev.clientX; svgPt.y = ev.clientY;
+  var m = svg.getScreenCTM();
+  return m ? svgPt.matrixTransform(m.inverse()) : { x: 0, y: 0 };
+}
+function spoolDown(ev){
+  spoolOn = true; spoolSlack = 0;
+  spoolLast = ev ? toSVG(ev) : { x: 342, y: 322 };
+  spoolRing.setAttribute("stroke-width", "3.4");
+}
+function spoolUp(){
+  spoolOn = false; spoolLast = null;
+  spoolRing.setAttribute("stroke-width", "2");
+}
+function spoolMove(ev){
+  if(!spoolOn) return;
+  if(game === "strike" && strikePhase === "setshow"){
+    var pb = toSVG(ev); if(!pb || !spoolLast) return;
+    var db = Math.sqrt((pb.x - spoolLast.x) * (pb.x - spoolLast.x) + (pb.y - spoolLast.y) * (pb.y - spoolLast.y));
+    spoolLast = pb;
+    if(db > 0.5) pedalBank = Math.min(16, pedalBank + db * 0.045 * reelPower());
+    return;
+  }
+  if(game !== "fight") return;
+  var p = toSVG(ev); if(!p || !spoolLast) return;
+  var dx = p.x - spoolLast.x, dy = p.y - spoolLast.y;
+  var dist = Math.sqrt(dx * dx + dy * dy);
+  spoolLast = p;
+  if(dist > 0.5){
+    spoolAngle = (spoolAngle + dist * 1.4) % 360;
+    spoolG.setAttribute("transform", "");      /* ring stays put; knob orbits below */
+    doReel(dist * 0.045 * reelPower());
+  }
+}
+function gameTap(ev){
+  noteTap(ev);
+  if(game === "wall"){ cast(); return; }
+  if(game === "aim"){
+    /* CHOOSE THE CAST: a tap ON the water is the spot; a tap
+       anywhere else takes the arrow where it stands. */
+    var ap = (ev && typeof ev.clientX === "number") ? toSVG(ev) : null;
+    if(ap && ap.y >= 92 && ap.y <= 215) fireCast(ap.x);
+    else fireCast(arrowX);
+    return;
+  }
+  if(game === "wait"){
+    var pw = reelPower();
+    workGlow = clamp(0.5 + pw * 0.55, 0, 1.7);
+    waitMs -= 300 + 260 * pw;                 /* working the lure hurries the strike — less cheaply in v1.1 */
+    splash(spotX + (Math.random() - 0.5) * 8, 150, 2);
+    if(waitMs <= 0) startStrike();
+    return;
+  }
+  if(game === "strike"){
+    catchAttempt(ev);                            /* the snatch-tap class of set */
+    /* THE PEDAL NEVER PAUSES (owner, Nov 22): taps through the set
+       window and the whole set show BANK as pedal — the fight opens
+       with that ground already won. */
+    if(game === "strike") pedalBank = Math.min(16, pedalBank + reelPower() * 0.8);
+    return;
+  }
+  if(game === "fight"){ spoolSlack = 0; catchAttempt(ev); doReel(reelPower() * 0.8); }
+}
+var faceEl = document.getElementById("face");
+faceEl.addEventListener("pointerdown", function(ev){
+  if(ev.target === dnrChip) return;          /* the license link is a link */
+  if(ev.target === vibeChip) return;         /* the vibe switch is a switch */
+  if(game === "fight") spoolSlack = 0;       /* a tap is a hand on the rod — only a hand fully off bleeds line */
+  if(game === "fight" || (game === "strike" && strikePhase === "setshow")){
+    var p = toSVG(ev);
+    var dx = p.x - 342, dy = p.y - 322;
+    if(Math.sqrt(dx * dx + dy * dy) < 54){ catchAttempt(ev); spoolDown(ev); noteTap(ev); return; }
+  }
+  if(game === "strike" || game === "fight"){
+    var p2 = toSVG(ev);
+    flickTrack = { x: p2.x, y: p2.y, t: Date.now() };
+  }
+  gameTap(ev);
+}, true);
+faceEl.addEventListener("pointermove", function(ev){
+  if(spoolOn) spoolMove(ev);
+  if(flickTrack){
+    var p = toSVG(ev), now = Date.now(), dtm = now - flickTrack.t;
+    var dy = p.y - flickTrack.y;
+    if(dy <= -34 && dtm <= 170 && (-dy) / Math.max(1, dtm) >= 0.45){ flickTrack = null; fireCatch(); }
+    else if(dtm > 220) flickTrack = null;
+  }
+}, true);
+faceEl.addEventListener("pointerup", function(){ if(spoolOn) spoolUp(); }, true);
+faceEl.addEventListener("pointercancel", function(){ if(spoolOn) spoolUp(); }, true);
+
+function gameFrame(dt, t){
+  var i, s;
+  /* FISH ON! — flashes hard for the first beats, then fades over the
+     set show; the fish underneath never leaves the screen. */
+  if(fishOnT >= 0){
+    fishOnT += dt;
+    var fk = fishOnT;
+    var fo = fk < 760 ? (Math.sin(fk / 62) > -0.2 ? 1 : 0.25)
+                      : Math.max(0, 1 - (fk - 760) / 900);
+    fishOnEl.style.opacity = fo.toFixed(2);
+    fishOnEl.style.transform = "scale(" + (1 + 0.1 * Math.max(0, 1 - fk / 300)).toFixed(3) + ")";
+    if(fk > 1800){ fishOnT = -1; fishOnEl.style.opacity = "0"; }
+  }
+  if(game === "aim"){
+    /* THE AIM: the arrow sweeps the surface BACK AND FORTH, through
+       the people's water and the clean water alike — where the cast
+       goes is the player's choice and the player's responsibility.
+       Single frames, frame-traded: the scene is still; only the
+       arrow (a function plate) rides. */
+    aimT += dt;
+    arrowX = 200 + Math.sin(aimT * (Math.PI * 2 / 2700)) * 168;
+    aimG.setAttribute("transform", "translate(" + arrowX.toFixed(1) + " " +
+      (Math.sin(aimT / 210) * 2).toFixed(1) + ")");
+    rodG.setAttribute("transform", "rotate(" + (Math.sin(aimT / 640) * 2.4).toFixed(2) + " 196 400)");
+    linePath.setAttribute("d", "M258 268 Q" + (258 + (arrowX - 258) * 0.4).toFixed(1) + " 210 " +
+      arrowX.toFixed(1) + " 112");
+  }
+  else if(game === "castfly"){
+    /* THE FLIGHT, in traded frames: the BACK-CAST frame first — the
+       rod swings back over the shoulder and the line trails behind
+       (the look-back beat, inside the motion) — then the forward
+       frame trades in and the lure flies out and PLUNKS at the
+       chosen spot. */
+    castT += dt;
+    if(castT < 320){                                   /* the back-cast frame */
+      var bk = castT / 320;
+      rodG.setAttribute("transform", "rotate(" + (-34 * Math.sin(bk * Math.PI)).toFixed(1) + " 196 400)");
+      lureG.setAttribute("transform", "translate(" + lerp(258, 96, bk).toFixed(1) + " " +
+        lerp(268, 84, bk).toFixed(1) + ") rotate(" + (bk * 120).toFixed(0) + ")");
+      linePath.setAttribute("d", "M226 282 Q160 130 " + lerp(258, 96, bk).toFixed(1) + " " + lerp(268, 84, bk).toFixed(1));
+    } else {                                           /* the forward flight */
+      var fk2 = clamp((castT - 320) / 480, 0, 1);
+      rodG.setAttribute("transform", "rotate(" + (6 * Math.sin(fk2 * Math.PI)).toFixed(1) + " 196 400)");
+      var fx = lerp(240, spotX, fk2), fy = lerp(250, 118, fk2) - Math.sin(fk2 * Math.PI) * 120;
+      lureG.setAttribute("transform", "translate(" + fx.toFixed(1) + " " + fy.toFixed(1) +
+        ") rotate(" + (Math.sin(castT / 23) * 14).toFixed(1) + ") scale(" + (1 - fk2 * 0.4).toFixed(2) + ")");
+      bobberG.setAttribute("opacity", "1");
+      bobberG.setAttribute("transform", "translate(" + fx.toFixed(1) + " " + (fy - 30).toFixed(1) + ")");
+      var coil = [];
+      for(i = 0; i <= 22; i++){
+        var u2 = i / 22, wob = Math.sin(u2 * 13 - castT / 55) * 8 * (1 - u2) * fk2;
+        coil.push((i ? "L" : "M") + lerp(258, fx, u2).toFixed(1) + " " + (lerp(268, fy - 14, u2) + wob).toFixed(1));
+      }
+      linePath.setAttribute("d", coil.join(" "));
+      if(castT >= 800) startSettle();
+    }
+  }
+  else if(game === "foul"){
+    /* THE FOUL, played straight in the cartoon register: the hook
+       takes the hat clean off, the hat sails, the buddy yelps — and
+       the cast is gone. The protocol teaches by consequence. */
+    foulT += dt;
+    var fk3 = clamp(foulT / 700, 0, 1);
+    /* hat flight: local +y is DOWN on screen, so the hat sails on a
+       negative y arc; local x is steered by the figure's flip */
+    if(foulHat) foulHat.setAttribute("transform", "translate(" + (foulSide * foulHat._flip * fk3 * 84).toFixed(1) + " " +
+      (-Math.sin(fk3 * Math.PI) * 66 - fk3 * 12).toFixed(1) + ") rotate(" + (foulSide * fk3 * 130).toFixed(0) + ")");
+    yelpEl.setAttribute("opacity", foulT > 120 && foulT < 1000 ? "1" : "0");
+    lureG.setAttribute("opacity", "1");
+    lureG.setAttribute("transform", "translate(" + (spotX + foulSide * fk3 * 46).toFixed(1) + " " +
+      (58 - Math.sin(fk3 * Math.PI) * 36).toFixed(1) + ") rotate(" + (fk3 * 200).toFixed(0) + ")");
+    linePath.setAttribute("d", "M258 268 Q" + spotX + " 160 " + (spotX + foulSide * fk3 * 46).toFixed(1) + " " +
+      (58 - Math.sin(fk3 * Math.PI) * 36).toFixed(1));
+    if(foulT >= 1250){
+      if(foulHat) foulHat.setAttribute("transform", "");
+      yelpEl.setAttribute("opacity", "0");
+      lureG.setAttribute("opacity", "0");
+      backToWall();
+    }
+  }
+  else if(game === "settle"){
+    /* THE SILENCE: rings run out at the CHOSEN spot, the water calms. */
+    settleT += dt;
+    var sb = 118 + Math.sin(settleT / 300) * 1.1;
+    bobberG.setAttribute("transform", "translate(" + spotX + " " + sb.toFixed(1) + ")");
+    lureG.setAttribute("transform", "translate(" + spotX + " " + (150 + settleT / 28) + ") rotate(" + (Math.sin(settleT / 90) * 4).toFixed(1) + ")");
+    linePath.setAttribute("d", "M" + spotX + " " + sb.toFixed(1) + " L" + spotX + " " + (134 + settleT / 28).toFixed(1));
+    for(i = 0; i < ripples.length; i++){
+      var rp2 = clamp(settleT / 1150 + ripples[i].ph * 0.3, 0, 1);
+      ripples[i].c.setAttribute("r", (6 + rp2 * 30).toFixed(1));
+      ripples[i].c.setAttribute("opacity", (0.5 * (1 - rp2)).toFixed(2));
+      ripples[i].c.setAttribute("cx", spotX);
+      ripples[i].c.setAttribute("cy", 119);
+    }
+    if(settleT >= 1150) startWait();
+  }
+  else if(game === "wait"){
+    var bobY = 118 + Math.sin(t / 340) * 2.2;
+    bobberG.setAttribute("transform", "translate(" + spotX + " " + bobY.toFixed(1) + ")");
+    var lureSwing = Math.sin(t / 520) * (6 + workGlow * 16);
+    var lureY = 196 + Math.sin(t / 430) * 3;
+    lureG.setAttribute("transform", "translate(" + (spotX + lureSwing).toFixed(1) + " " + lureY.toFixed(1) +
+      ") rotate(" + (Math.sin(t / 300) * (8 + workGlow * 26)).toFixed(1) + ")");
+    linePath.setAttribute("d", "M" + spotX + " " + bobY.toFixed(1) + " L" + (spotX + lureSwing).toFixed(1) + " " + (lureY - 16).toFixed(1));
+    for(i = 0; i < ripples.length; i++){
+      var rp = (t / 2600 + ripples[i].ph) % 1;
+      ripples[i].c.setAttribute("r", (5 + rp * 20).toFixed(1));
+      ripples[i].c.setAttribute("opacity", (0.4 * (1 - rp)).toFixed(2));
+      ripples[i].c.setAttribute("cx", spotX);
+      ripples[i].c.setAttribute("cy", bobY + 1);
+    }
+    if(!shadowOn && Math.random() < dt / (5200 / (1 + workGlow * 1.3))){ shadowOn = true; shadowDir = Math.random() < 0.5 ? 1 : -1; shadowX = shadowDir > 0 ? -190 : 590; }
+    if(shadowOn){
+      shadowX += shadowDir * dt * 0.045 * (1 + workGlow);
+      shadowG.setAttribute("opacity", "1");
+      shadowG.firstChild.setAttribute("transform",
+        "translate(" + shadowX.toFixed(1) + " " + (262 + Math.sin(t / 700) * 7).toFixed(1) + ") scale(" + shadowDir + " 1)");
+      if(shadowX < -240 || shadowX > 640) shadowOn = false;
+    } else shadowG.setAttribute("opacity", "0");
+    workGlow = Math.max(0, workGlow - dt / 620);
+    waitMs -= dt * (1 + workGlow * 0.5);
+    if(waitMs <= 0) startStrike();
+  }
+  else if(game === "strike"){
+    /* THE POSE SEQUENCE (v1.1): SWALLOW (front-facing, bait going
+       in, camera scoping back out) -> SET WINDOW (the money shot:
+       mouth open, eyes wild, lure hooked at the lip — the player
+       sets the hook or loses the moment) -> ERUPTION + DIVE (side
+       poses) -> the fight. No set: the fish THROWS the lure. */
+    strikeT += dt; phaseT += dt;
+    var zoomK = clamp(strikeT / 1500, 0, 1);
+    stageZoom((1 - 0.12 * zoomK).toFixed(3));      /* the pullback */
+    if(strikePhase === "swallow"){
+      var sk = clamp(phaseT / 600, 0, 1);
+      var open = phaseT < 130 ? phaseT / 130 * 0.4 :
+                 phaseT < 380 ? 0.4 + (phaseT - 130) / 250 * 0.6 :
+                 1 - (phaseT - 380) / 220 * 0.7;
+      frontPose(0.55 + sk * 0.51, spotX, 158, clamp(open, 0, 1), false);
+      var lk = clamp((phaseT - 140) / 340, 0, 1);
+      FRONT.inLure.setAttribute("opacity", lk > 0 && lk < 1 ? "1" : "0");
+      FRONT.inLure.setAttribute("transform", "translate(0 " + lerp(-128, 14, lk).toFixed(1) + ") rotate(" + (Math.sin(phaseT / 30) * 10).toFixed(1) + ")");
+      bobberG.setAttribute("transform", "translate(" + spotX + " " + (118 + sk * 26) + ")");
+      linePath.setAttribute("d", "M" + spotX + " " + (118 + sk * 26) + " L" + spotX + " 128");
+      if(phaseT >= 600){
+        strikePhase = "setwindow"; phaseT = 0;
+        FRONT.inLure.setAttribute("opacity", "0");
+        FRONT.hookLure.setAttribute("opacity", "1");
+        setStatus("SET THE HOOK!"); setHint("JERK — WRIST FLIP · YANK · SNATCH IT");
+      }
+    }
+    else if(strikePhase === "setwindow"){
+      frontPose(1.06, spotX, 158, 0.55, true);
+      FRONT.head.setAttribute("transform", "rotate(" + (Math.sin(phaseT / 46) * 2.6).toFixed(2) + ")");
+      if(phaseT >= 850 && !setDone) doSpit();
+    }
+    else if(strikePhase === "setshow"){
+      /* THE SET SHOW (owner playtest fix, Nov 22): the set gets its
+         own pose set, and the fish NEVER blanks — every beat opens
+         with its fish already on screen, fades overlap, nothing
+         fades to empty water. A: AIRBORNE (the leap, big). B: THE
+         SPIT SHAKE (side pose at the surface, head shaking, the
+         lure at its lip). C: THE CHOMP (face on, mouth snapping,
+         the lure in its mouth). D: THE CLOSE FRAME (teeth gnashing
+         for the toothed class; the lure deep in the throat with the
+         gills flaring for the toothless; pinned at the bill for the
+         marlin). Then the fight takes the same fish. */
+      var cf = CFG.fish.closeFrame || "throat";
+      if(phaseT < 500){                                   /* A — AIRBORNE */
+        var ka = clamp(phaseT / 500, 0, 1);
+        frontG.setAttribute("opacity", (1 - clamp(phaseT / 160, 0, 1)).toFixed(2));
+        leapG.setAttribute("opacity", "1");
+        var ax = 200 + (ka - 0.5) * 92, ay = 158 - Math.sin(ka * Math.PI) * 106;
+        leapInner.setAttribute("transform", "translate(" + ax.toFixed(1) + " " + ay.toFixed(1) +
+          ") rotate(" + (-42 + ka * 84).toFixed(1) + ")");
+        linePath.setAttribute("d", "M388 28 L" + (ax - 96).toFixed(1) + " " + ay.toFixed(1));
+        if(phaseT - dt < 40 && phaseT >= 40) splash(196, 118, 16);
+        if(phaseT - dt < 452 && phaseT >= 452) splash(ax, 120, 13);
+      }
+      else if(phaseT < 950){                              /* B — SPIT SHAKE */
+        var kb = (phaseT - 500) / 450;
+        leapG.setAttribute("opacity", "1");
+        var bx = 246 - kb * 22, by = 130 + Math.sin(phaseT / 90) * 3;
+        leapInner.setAttribute("transform", "translate(" + bx.toFixed(1) + " " + by.toFixed(1) +
+          ") rotate(" + (Math.sin(phaseT / 33) * 13).toFixed(1) + ")");
+        if(leapMouth) leapMouth.setAttribute("opacity", "1");
+        linePath.setAttribute("d", "M388 28 L" + (bx - 100).toFixed(1) + " " + (by - 4).toFixed(1));
+        if(phaseT - dt < 540 && phaseT >= 540) splash(bx - 60, 120, 8);
+        if(phaseT - dt < 760 && phaseT >= 760) splash(bx - 30, 120, 7);
+      }
+      else if(phaseT < 1400){                             /* C — THE CHOMP */
+        var kc = (phaseT - 950) / 450;
+        leapG.setAttribute("opacity", Math.max(0, 1 - clamp((phaseT - 950) / 110, 0, 1)).toFixed(2));
+        frontG.setAttribute("opacity", clamp((phaseT - 950) / 90, 0, 1).toFixed(2));
+        var chomp = 0.3 + 0.65 * Math.abs(Math.sin(kc * Math.PI * 2));
+        frontPose(1.16, 200, 160, chomp, true);
+        FRONT.head.setAttribute("transform", "rotate(" + (Math.sin(phaseT / 52) * 2.2).toFixed(2) + ")");
+        FRONT.hookLure.setAttribute("opacity", "0");      /* the lure is IN the mouth now */
+        FRONT.throatLure.setAttribute("opacity", "1");
+        linePath.setAttribute("d", "M200 0 L200 108");
+      }
+      else {                                              /* D — THE CLOSE FRAME */
+        var kd = clamp((phaseT - 1400) / 550, 0, 1);
+        frontG.setAttribute("opacity", "1");
+        leapG.setAttribute("opacity", "0");
+        var gnash = 0.74 + Math.sin(phaseT / 36) * 0.09;
+        frontPose(1.44, 200, 184, gnash, true);
+        FRONT.head.setAttribute("transform", "rotate(" + (Math.sin(phaseT / 31) * 1.3).toFixed(2) + ")");
+        FRONT.throatLure.setAttribute("opacity", "1");
+        if(cf === "teeth" && FRONT.teethG){
+          FRONT.teethG.setAttribute("opacity", Math.min(1, kd * 2).toFixed(2));
+          if(FRONT.teethG._low) FRONT.teethG._low.setAttribute("transform", "translate(0 " + (gnash * 5).toFixed(1) + ")");
+          FRONT.throatLure.setAttribute("transform", "translate(0 34) scale(0.85)");
+        } else if(cf === "bill"){
+          FRONT.throatLure.setAttribute("transform", "translate(0 20) scale(0.66)");  /* pinned at the bill's base */
+        } else {
+          FRONT.gillFlare.setAttribute("opacity", (0.45 + 0.5 * Math.sin(phaseT / 95)).toFixed(2));
+          FRONT.throatLure.setAttribute("transform", "translate(0 38) scale(0.85)");  /* deep in the throat */
+        }
+        linePath.setAttribute("d", "M200 0 L200 122");
+      }
+      if(phaseT >= 1950) startFight();
+    }
+    else if(strikePhase === "spit"){
+      var pk = clamp(phaseT / 1050, 0, 1);
+      frontPose(1.02 - pk * 0.14, 200, 158 + pk * 44, 1, false);
+      frontG.setAttribute("opacity", (1 - clamp((phaseT - 500) / 450, 0, 1)).toFixed(2));
+      FRONT.hookLure.setAttribute("opacity", "0");
+      FRONT.inLure.setAttribute("opacity", "1");
+      FRONT.inLure.setAttribute("transform", "translate(" + (pk * 120).toFixed(1) + " " +
+        (14 - Math.sin(pk * Math.PI) * 120 - pk * 30).toFixed(1) + ") rotate(" + (pk * 260).toFixed(1) + ")");
+      if(phaseT > 140 && phaseT - dt <= 140) splash(212, 120, 12);
+      if(phaseT >= 1050) backToWall();
+    }
+  }
+  else if(game === "fight"){
+    fightMs += dt;
+    var ph = phaseOf();
+    /* ---- phase transitions + the slip events ---- */
+    if(ph.name !== phaseName){
+      phaseName = ph.name;
+      if(ph.name === "drop" && hookState === "seated"){
+        hookState = "slipping";
+        slipTarget = Math.max(4, Math.min(plan.dropTarget, progress - 6));
+        resetWinT = 2600;
+        buzz(70);
+        setStatus("THE HOOK SLIPS —"); setHint("JERK TO RE-SET — WRIST · YANK · FLICK");
+      } else if(hookState === "seated"){
+        setStatus(PHASE_STATUS[ph.name] || "");
+      }
+    }
+    /* old growth and dinosaurs demand a re-set before they come in:
+       entering the final without one triggers a last slip */
+    if(ph.name === "final" && !finalSlipDone && !resetDone &&
+       (pending.ageClass === "old" || pending.ageClass === "dinosaur")){
+      finalSlipDone = true; hookState = "slipping";
+      slipTarget = Math.max(10, Math.min(55 + Math.random() * 10, progress - 8));
+      resetWinT = 2600;
+      buzz(70);
+      setStatus("ONE MORE SLIP —"); setHint("JERK TO RE-SET — WRIST · YANK · FLICK");
+    }
+    /* ---- the meter: pedal gains live in doReel; here it drains ---- */
+    var fatigue = Math.max(0.30, 1 - 0.65 * (fightMs / plan.T));
+    if(hookState === "slipping"){
+      resetWinT -= dt;
+      progress = Math.max(slipTarget, progress - 30 * dt / 1000);   /* the slip runs fast */
+      tension = clamp(tension + dt * 0.012, 0, 104);
+      if(resetWinT <= 0){ hookState = "loose"; phaseName = "loose"; setStatus(PHASE_STATUS.loose); setHint("JERK TO RE-SET — WRIST · YANK · FLICK"); }
+    } else {
+      progress -= plan.drainBase * ph.drainMul * fatigue * dt / 1000;
+    }
+    progress = clamp(progress, 0, 100);
+    /* a fully bottomed meter, hook slipping or loose, is the hook pulled */
+    if(progress <= 0 && hookState !== "seated"){
+      bottomMs += dt;
+      if(bottomMs > 900){ loseFish("THE HOOK PULLED — IT WORKED IT LOOSE", "loose"); return; }
+    } else bottomMs = 0;
+    /* ---- tension: surges, decay, slack (v1.0 grammar, retimed) ---- */
+    surgeT -= dt;
+    if(surgeT <= 0){ surging = 380 + Math.random() * 320; surgeT = 1150 + Math.random() * 1350; buzz(55);
+      /* THE HUMBUG (owner, Nov 24): sometimes it just throws the
+         lure — a head-shake on the surge, no fault of the angler's.
+         ~1.2% a surge once the fight is real (roughly one fight in
+         six or seven): rare enough to curse, common enough to see.
+         Distinct from every earned loss. */
+      if(hookState === "seated" && fightMs > 4000 && Math.random() < 0.012){
+        loseFish("IT SPIT THE " + CFG.lureShort.toUpperCase() + "! — THREW IT ON THE SHAKE", "spit");
+        return;
+      }
+    }
+    if(surging > 0){ tension += dt * 0.044 * tire; surging -= dt;
+      if(surging <= 0) tension -= 6; }   /* the run spends itself — the sawtooth must not ratchet */
+    tension -= dt * 0.010;
+    if(spoolOn){ spoolSlack = 0; }
+    else {
+      spoolSlack += dt;
+      if(spoolSlack > 900) tension -= dt * 0.020;
+    }
+    resting = surging <= 0 && surgeT < 620 && hookState === "seated";
+    if(resting && !restCalled){ restCalled = true; setHint("IT RESTS — POWER REEL, NOW"); }
+    if(!resting) restCalled = false;
+    tire = clamp(1 - 0.55 * fightMs / plan.T, 0.4, 1);
+    tension = clamp(tension, 0, 104);
+    /* THE SNAP IS SUSTAINED OVERLOAD, not a one-frame spike: a surge
+       peak you release survives; holding the red for ~350 ms parts
+       the line. (Calibration, Nov 22: spike-snaps were killing
+       honest fights on the surge sawtooth.) */
+    if(tension >= 100){ snapMs += dt; if(snapMs > 350) loseFish("SNAP! — THE LINE PARTED", "snap"); }
+    else snapMs = Math.max(0, snapMs - dt * 2);
+    if(tension <= 3){ slackMs += dt; if(slackMs > 2200 && fightMs > 3500) loseFish(spoolSlack > 900 ? "FINGER OFF THE SPOOL — IT RAN THE SLACK OUT" : "SLACK LINE — IT SHOOK FREE", "slack"); }
+    else slackMs = Math.max(0, slackMs - dt * 2);
+    if(game !== "fight") return;               /* snapped / shook free above */
+    buzzT -= dt;
+    if(tension > 84 && buzzT <= 0){ buzz(28); buzzT = 600; }   /* wiggle through the spool */
+    /* ---- the fish, SEEN working: runs with the drain, thrashes ---- */
+    var drainNow = hookState === "slipping" ? 16 : plan.drainBase * ph.drainMul * fatigue;
+    var speed = 30 + drainNow * 6.5;
+    fishX += fishDir * speed * dt / 1000;
+    if(fishX > 306){ fishX = 306; fishDir = -1; }
+    if(fishX < 94){ fishX = 94; fishDir = 1; }
+    var fy = 232 + Math.sin(fightMs / 433) * 26;
+    var thrashMs = Math.max(34, 74 - drainNow * 2.4);
+    leapInner.setAttribute("transform", "translate(" + fishX.toFixed(1) + " " + fy.toFixed(1) +
+      ") rotate(" + (Math.sin(fightMs / thrashMs) * (5 + drainNow * 0.55)).toFixed(1) +
+      ") scale(" + (fishDir < 0 ? 0.88 : -0.88) + " 0.88)");
+    leapG.setAttribute("opacity", "0.94");
+    linePath.setAttribute("d", "M388 30 Q" + ((388 + fishX) / 2) + " " + (60 + tension * 0.4) + " " + fishX.toFixed(1) + " " + (fy - 8).toFixed(1));
+    var mh = clamp(tension, 0, 100) / 100 * 158;
+    meterFill.setAttribute("y", (308 - mh).toFixed(1));
+    meterFill.setAttribute("height", mh.toFixed(1));
+    meterFill.setAttribute("fill", tension > 82 ? "#ff5347" : (tension < 22 ? "#57b6e6" : "#ffc44d"));
+    progFill.setAttribute("width", (progress / 100 * 300).toFixed(1));
+    progFill.setAttribute("fill", hookState !== "seated" ? "#ff5347" : (progress <= 30 ? "#ffc44d" : "#5ee07d"));
+    spoolRing.setAttribute("transform", "rotate(" + spoolAngle.toFixed(1) + " 342 322)");
+    if(speed > 95 && Math.random() < dt / 260) splash(fishX, 122, 2);
+  }
+  else if(game === "landing"){
+    /* THE LANDING, PLAYED: HAUL (the fish dragged up, the bow
+       leaving the line until it hums straight) -> BREACH (it flies
+       out of the water on that tight line, the full-page splash,
+       rings running out) -> the wall takes it. */
+    landT += dt;
+    var surfX = 292, surfY = 130;
+    if(landT < 520){                                    /* THE HAUL */
+      var hk = clamp(landT / 520, 0, 1), he = hk * hk * (3 - 2 * hk);
+      var hx = lerp(landFrom.x, surfX, he), hy = lerp(landFrom.y, surfY, he);
+      leapInner.setAttribute("transform", "translate(" + hx.toFixed(1) + " " + hy.toFixed(1) +
+        ") rotate(" + (Math.sin(landT / 40) * 7).toFixed(1) + ") scale(-0.88 0.88)");
+      leapG.setAttribute("opacity", "0.97");
+      var sag = lerp(46, 2, he);                        /* the bow leaves the line */
+      linePath.setAttribute("d", "M388 30 Q" + ((388 + hx) / 2).toFixed(1) + " " + ((30 + hy) / 2 + sag).toFixed(1) +
+        " " + hx.toFixed(1) + " " + (hy - 10).toFixed(1));
+      if(Math.random() < dt / 90) splash(hx + (Math.random() - 0.5) * 30, 121, 2);
+    } else if(landT < 1420){                            /* THE BREACH — it FLIES */
+      var bk = clamp((landT - 520) / 900, 0, 1);
+      if(!landBreachDone){
+        landBreachDone = true;
+        splash(surfX, 118, 64);                         /* the full-page fish splash */
+        splashRing(surfX, 119, true);
+        buzz([40, 30, 140]);
+        setStatus("OUT OF THE WATER!"); setHint("");
+      }
+      if(landT > 700 && !ring2Done){ ring2Done = true; splashRing(surfX - 26, 119, false); splash(surfX - 20, 118, 18); }
+      if(landT > 900 && !ring3Done){ ring3Done = true; splashRing(surfX + 30, 119, false); splash(surfX + 24, 118, 14); }
+      var bx = surfX + bk * 38, by = surfY - Math.sin(bk * Math.PI) * 96 + bk * 26;
+      leapInner.setAttribute("transform", "translate(" + bx.toFixed(1) + " " + by.toFixed(1) +
+        ") rotate(" + (-58 + bk * 168).toFixed(1) + ") scale(-0.92 0.92)");
+      /* the line stays TIGHT: rod tip to mouth, straight */
+      linePath.setAttribute("d", "M388 30 L" + (bx - 74).toFixed(1) + " " + (by - 6).toFixed(1));
+      if(Math.random() < dt / 60) splash(bx - 40, by + 26, 1);   /* water off the fish */
+    } else {                                            /* the wall takes it */
+      leapG.setAttribute("opacity", clamp(1 - (landT - 1420) / 260, 0, 1).toFixed(2));
+      linePath.setAttribute("d", "");
+      if(landT >= 1700) finishLanding();
+    }
+  }
+  else if(game === "escape"){
+    /* THE ESCAPE, PLAYED: for the spit, THE SHAKE first — the head
+       thrashes and the lure is seen flying out of the mouth — then
+       THE RUN: a thrashing dive for deep water, gone off the edge,
+       the line fallen slack and sinking behind it. */
+    escT += dt;
+    var ex = escFrom.x, ey = escFrom.y;
+    if(escKind === "spit" && escT < 480){               /* THE SHAKE */
+      var shk = Math.sin(escT / 26) * 13 * (1 - escT / 480);
+      leapInner.setAttribute("transform", "translate(" + ex.toFixed(1) + " " + ey.toFixed(1) +
+        ") rotate(" + shk.toFixed(1) + ") scale(" + (escDir > 0 ? -0.88 : 0.88) + " 0.88)");
+      leapG.setAttribute("opacity", "0.94");
+      linePath.setAttribute("d", "M388 30 Q" + ((388 + ex) / 2).toFixed(1) + " 96 " + ex.toFixed(1) + " " + (ey - 8).toFixed(1));
+      if(escLure && escT > 190){
+        if(escLureT < 0) escLureT = 0; else escLureT += dt;
+        var lk = clamp(escLureT / 620, 0, 1);
+        var lx = ex - escDir * 60 - lk * escDir * 120;
+        var ly = ey - 14 - Math.sin(lk * Math.PI) * 66 + lk * lk * 120;
+        escLure.setAttribute("opacity", "1");
+        escLure.setAttribute("transform", "translate(" + lx.toFixed(1) + " " + ly.toFixed(1) + ") rotate(" + (lk * 300 * escDir).toFixed(1) + ")");
+        if(lk >= 1){ splash(clamp(lx, 8, 392), 120, 6); escLure.setAttribute("opacity", "0"); escLure = null; }
+      }
+    } else {                                            /* THE RUN FOR DEEP WATER */
+      var rk = clamp((escT - (escKind === "spit" ? 480 : 0)) / 1500, 0, 1);
+      var re = rk * rk * (3 - 2 * rk);
+      ex = escFrom.x + escDir * re * 300;
+      ey = escFrom.y + re * 96 + Math.sin(escT / 90) * (4 + (1 - rk) * 5);
+      leapInner.setAttribute("transform", "translate(" + ex.toFixed(1) + " " + ey.toFixed(1) +
+        ") rotate(" + (Math.sin(escT / 34) * 8).toFixed(1) + ") scale(" + (escDir > 0 ? -0.88 : 0.88) + " 0.88)");
+      leapG.setAttribute("opacity", (0.94 * (1 - rk * 0.55)).toFixed(2));
+      /* the line falls slack and sinks behind it */
+      linePath.setAttribute("d", "M388 30 Q" + ((388 + escFrom.x) / 2).toFixed(1) + " " + (150 + rk * 90).toFixed(1) +
+        " " + escFrom.x.toFixed(1) + " " + (escFrom.y + rk * 60).toFixed(1));
+      if(rk < 0.4 && Math.random() < dt / 120) splash(clamp(ex - escDir * 60, 8, 392), 122, 2);
+    }
+    if(escT >= 2300){ game = "lost"; endT = 1100; leapG.setAttribute("opacity", "0"); linePath.setAttribute("d", ""); }
+  }
+  else if(game === "landed" || game === "lost"){
+    endT += dt;
+    if(endT > 2500) backToWall();
+  }
+  /* splash particles, any state */
+  for(i = splashPool.length - 1; i >= 0; i--){
+    s = splashPool[i]; s.life += dt;
+    s.x += s.vx * dt / 1000; s.y += s.vy * dt / 1000; s.vy += 340 * dt / 1000;
+    s.c.setAttribute("cx", s.x.toFixed(1)); s.c.setAttribute("cy", s.y.toFixed(1));
+    s.c.setAttribute("opacity", clamp(1 - s.life / 620, 0, 1).toFixed(2));
+    if(s.life > 620){ splashG.removeChild(s.c); splashPool.splice(i, 1); }
+  }
+  /* splash rings, any state */
+  for(i = ringPool.length - 1; i >= 0; i--){
+    var rg = ringPool[i]; rg.life += dt;
+    var rk2 = clamp(rg.life / rg.dur, 0, 1);
+    rg.e.setAttribute("rx", (6 + rk2 * rg.max).toFixed(1));
+    rg.e.setAttribute("ry", (2.2 + rk2 * rg.max * 0.30).toFixed(1));
+    rg.e.setAttribute("opacity", (0.8 * (1 - rk2)).toFixed(2));
+    if(rk2 >= 1){ splashG.removeChild(rg.e); ringPool.splice(i, 1); }
+  }
+}
+
+/* ================= clock ============================================ */
+var clockEl = document.getElementById("clock"), dateEl = document.getElementById("dateLine");
+var lampEl = document.getElementById("stateLamp");
+var DAYS = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+var MONS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+var lastMinute = -1;
+function paintTime(now){
+  var m = now.getMinutes();
+  lastMinute = m;
+  var hh = now.getHours(), h12 = hh % 12; if(h12 === 0) h12 = 12;
+  clockEl.textContent = (h12 < 10 ? "0" : "") + h12 + ":" + (m < 10 ? "0" : "") + m;
+  dateEl.textContent = DAYS[now.getDay()] + " · " + MONS[now.getMonth()] + " " + now.getDate() +
+    " · " + (hh < 12 ? "AM" : "PM");
+}
+
+/* ================= Battery V2 state machine ========================= */
+var REST = "rest", OBSERVED = "observed";
+var state = REST, raf = 0, exitTimer = 0, lastFrameT = 0;
+var gov = { state: "rest", enters: 0, rests: 0, lastSignal: "boot" };
+window.__governor = gov;
+window.__faceRest = true;
+function stillPass(){ paintTime(new Date()); }
+function obsFrame(){
+  if(state !== OBSERVED) return;
+  var now = Date.now();
+  var dt = lastFrameT ? Math.min(64, now - lastFrameT) : 16;
+  lastFrameT = now;
+  gameFrame(dt, now);
+  raf = requestAnimationFrame(obsFrame);
+}
+function setLamp(){ lampEl.textContent = (state === OBSERVED) ? "OBSERVED" : "REST"; }
+function observe(sig){
+  if(state !== OBSERVED){
+    state = OBSERVED; lastFrameT = 0;
+    gov.state = "observed"; gov.enters++; window.__faceRest = false;
+    document.body.classList.add("observed"); setLamp();
+    armTrades();                                   /* plates trade only while watched */
+    raf = requestAnimationFrame(obsFrame);
+  }
+  gov.lastSignal = sig || "signal";
+  if(exitTimer) clearTimeout(exitTimer);
+  exitTimer = setTimeout(function(){ rest(); }, 12000);   /* 12 s auto-exit */
+}
+function rest(sig){
+  if(state === REST){ gov.lastSignal = sig || gov.lastSignal; stillPass(); return; }
+  state = REST;
+  gov.state = "rest"; gov.rests++; gov.lastSignal = sig || "signal";
+  window.__faceRest = true;
+  clearTrades();                                   /* the stack freezes at REST */
+  if(raf) cancelAnimationFrame(raf); raf = 0;
+  if(exitTimer){ clearTimeout(exitTimer); exitTimer = 0; }
+  document.body.classList.remove("observed"); setLamp();
+  stillPass();
+}
+function toggle(){ (state === OBSERVED) ? rest("toggle") : observe("toggle"); }
+window.ApexFace = {
+  observe: function(){ observe("container-observe"); },
+  rest:    function(){ rest("container-rest"); },
+  toggle:  toggle,
+  state:   function(){ return state; },
+  game:    function(){ return game; }        /* bench surface */
+};
+window.__fishBench = {                        /* bench surface, governor class */
+  game: function(){ return game; },
+  cast: cast, tap: gameTap,
+  reel: doReel,
+  spoolDown: function(){ spoolDown(null); },
+  spoolUp: spoolUp,
+  spoolStroke: function(d){ if(spoolOn) doReel(d * 0.045 * 1.2); },
+  resting: function(){ return resting; },
+  spoolSlack: function(){ return spoolSlack; },
+  board: function(){ try { return JSON.parse(localStorage.getItem("apex-fishing-board-v1") || "[]"); } catch(e){ return null; } },
+  setWait: function(ms){ waitMs = ms; },
+  /* v1.1 bench surface: the set gate, the re-set, the fight plan */
+  setHook: function(){ doSet(); },
+  jerk: function(){ fireCatch(); },
+  strikePhase: function(){ return strikePhase; },
+  hookState: function(){ return hookState; },
+  phase: function(){ return phaseName; },
+  plan: function(){ return plan; },
+  resetDone: function(){ return resetDone; },
+  /* v1.1 cast + set-show bench surface */
+  fireCast: function(x){ fireCast(x); },
+  arrowX: function(){ return arrowX; },
+  spotX: function(){ return spotX; },
+  pedalBank: function(){ return pedalBank; },
+  fishOn: function(){ return fishOnT >= 0; },
+  vibe: function(){ return vibeOn; },
+  setVibe: function(on){ vibeOn = !!on; paintVibe(); },
+  frontRefs: function(){ return FRONT ? { teeth: !!FRONT.teethG, close: CFG.fish.closeFrame || "throat" } : null; },
+  forceAge: function(cls){
+    for(var s = 1; s < 20000; s++){
+      var c = rollCatch(s);
+      if(c.ageClass === cls){
+        pending = c;
+        showScene(true);
+        startStrike();
+        return s;
+      }
+    }
+    return -1;
+  },
+  tension: function(){ return tension; },
+  setTension: function(v){ tension = v; },
+  progress: function(){ return progress; },
+  setProgress: function(v){ progress = v; },
+  /* v1.2 bench surface: the landing + escape cinematics */
+  forceSpit: function(){ if(game === "fight") loseFish("IT SPIT THE " + CFG.lureShort.toUpperCase() + "! — THREW IT ON THE SHAKE", "spit"); },
+  forceLose: function(kind){ if(game === "fight") loseFish("BENCH LOSS", kind || "slack"); },
+  escKind: function(){ return escKind; },
+  landT: function(){ return landT; },
+  fishPos: function(){ var t = leapInner ? leapInner.getAttribute("transform") : ""; return t || ""; },
+  callouts: function(){
+    var p = plateEl.getBoundingClientRect(), s = statusEl.getBoundingClientRect(), h = hintEl.getBoundingClientRect();
+    return { plate: { x: p.x, y: p.y, w: p.width, h: p.height, display: plateEl.style.display },
+             status: { y: s.y, h: s.height, sw: statusEl.scrollWidth, cw: statusEl.clientWidth, fs: statusEl.style.fontSize || "" },
+             hint: { y: h.y, h: h.height, sw: hintEl.scrollWidth, cw: hintEl.clientWidth, fs: hintEl.style.fontSize || "" } };
+  },
+  mount: function(){ return mount; }
+};
+window.addEventListener("apex-face-observe", function(){ observe("event-observe"); });
+window.addEventListener("apex-face-rest", function(){ rest("event-rest"); });
+window.addEventListener("focus", function(){ if(!document.hidden) observe("focus"); });
+window.addEventListener("blur", function(){ rest("blur"); });
+window.addEventListener("pointerdown", function(){ observe("pointer"); }, true);
+window.addEventListener("touchstart", function(){ observe("touch"); }, true);
+window.addEventListener("keydown", function(){ observe("key"); }, true);
+document.addEventListener("visibilitychange", function(){
+  if(document.hidden){ rest("hidden"); }
+  else if(document.hasFocus && document.hasFocus()){ observe("visible"); }
+  else { paintTime(new Date()); }
+});
+
+/* ================= boot ============================================= */
+paintTime(new Date());
+setLamp();
+if(/[?&]face=observed/.test(location.search)) observe();
+if(/[?&]autocast=1/.test(location.search)) cast();   /* bench hook */
+setInterval(function(){
+  var now = new Date();
+  if(now.getMinutes() !== lastMinute){ paintTime(now); }
+}, 1000);
+</script>
+</body>
+</html>

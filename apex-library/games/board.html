@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APEX FISHING — The Leaderboard</title>
+<style>
+  /* THE BOARD — the service spine of the Game SaaS. Landed fish post
+     here from the faces (shared container storage); places are real:
+     top three per species, house records standing until broken, and
+     every record carries its days-unbroken counter. */
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a140f;color:#eaf6ef;font-family:ui-monospace,Menlo,Consolas,monospace;
+    padding:14px 12px 22px;-webkit-user-select:none;user-select:none}
+  a.back{color:#5ee07d;text-decoration:none;font-size:13px;letter-spacing:.18em;font-weight:700}
+  h1{font-size:24px;letter-spacing:.12em;color:#e8c85a;text-align:center;margin-top:8px}
+  .sub{text-align:center;color:#9db8a8;font-size:11.5px;letter-spacing:.2em;margin:4px 0 12px}
+  h2{font-size:15px;letter-spacing:.16em;color:#e8c85a;margin:18px 0 8px;border-bottom:1px solid #2c5a3c;padding-bottom:5px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  td,th{padding:6px 4px;text-align:left;border-bottom:1px solid #1b3223;vertical-align:top}
+  th{color:#9db8a8;font-size:11px;letter-spacing:.14em}
+  .plc{font-weight:800;color:#e8c85a;width:34px}
+  .you{color:#5ee07d;font-weight:700}
+  .house{color:#9db8a8}
+  .days{color:#ffb52e;font-weight:700;white-space:nowrap}
+  .monster{color:#ff9a5c;font-weight:700}
+  .empty{color:#5f7a68;font-size:13px;padding:8px 2px;line-height:1.6}
+  .tri{font-size:13.5px;line-height:1.9}
+  .tri b{color:#a8d4f0}
+  .foot{text-align:center;color:#5f7a68;font-size:10.5px;letter-spacing:.16em;margin-top:20px;line-height:1.7}
+</style>
+</head>
+<body>
+<a class="back" href="index.html">← THE LINE</a>
+<h1>★ THE LEADERBOARD</h1>
+<div class="sub">PLACES ARE EARNED ON THE WATER</div>
+
+<h2>SPECIES RECORDS — DAYS UNBROKEN</h2>
+<table id="records"><tr><th></th><th>SPECIES</th><th>FISH</th><th>HOLDER</th><th>HELD</th></tr></table>
+
+<h2>YOUR PLACINGS</h2>
+<div id="placings"></div>
+
+<h2>MONSTER BOARD — OLD GROWTH &amp; DINOSAURS</h2>
+<div id="monsters"></div>
+
+<h2>TRIANGLE WATCH — THREE OF ONE SPECIES PLACED</h2>
+<div class="tri" id="triangle"></div>
+
+<div class="foot">HOUSE RECORDS STAND UNTIL A PLAYER BREAKS THEM<br>THE ARRANGEMENT MOUNT UNLOCKS AT THREE PLACED OF ONE SPECIES</div>
+
+<script>
+"use strict";
+/* House seed records — the standing marks, dated, beatable. */
+var SEEDS = [
+  { slug:"largemouth-bass", fish:"Largemouth Bass", len:24.1, unit:"IN", lbs:7.9, age:"old", holder:"HOUSE", when:"2026-10-18T12:00:00" },
+  { slug:"michigan-steelhead", fish:"Michigan Steelhead", len:33.4, unit:"IN", lbs:14.2, age:"prime", holder:"HOUSE", when:"2026-11-02T12:00:00" },
+  { slug:"rainbow-trout", fish:"Rainbow Trout", len:21.8, unit:"IN", lbs:4.6, age:"prime", holder:"HOUSE", when:"2026-10-25T12:00:00" },
+  { slug:"walleye", fish:"Walleye", len:29.6, unit:"IN", lbs:9.8, age:"old", holder:"HOUSE", when:"2026-10-30T12:00:00" },
+  { slug:"northern-pike", fish:"Northern Pike", len:41.2, unit:"IN", lbs:17.5, age:"prime", holder:"HOUSE", when:"2026-11-05T12:00:00" },
+  { slug:"muskie", fish:"Muskie", len:51.0, unit:"IN", lbs:34.8, age:"dinosaur", holder:"HOUSE", when:"2026-09-27T12:00:00" },
+  { slug:"chinook-salmon", fish:"Chinook Salmon", len:42.3, unit:"IN", lbs:29.4, age:"old", holder:"HOUSE", when:"2026-10-09T12:00:00" },
+  { slug:"bluegill", fish:"Bluegill", len:10.6, unit:"IN", lbs:0.9, age:"prime", holder:"HOUSE", when:"2026-11-10T12:00:00" },
+  { slug:"smallmouth-bass", fish:"Smallmouth Bass", len:20.4, unit:"IN", lbs:4.9, age:"prime", holder:"HOUSE", when:"2026-10-21T12:00:00" },
+  { slug:"blue-marlin", fish:"Blue Marlin", len:10.8, unit:"FT", lbs:612.0, age:"old", holder:"HOUSE", when:"2026-08-30T12:00:00" }
+];
+var mine = [];
+try { mine = JSON.parse(localStorage.getItem("apex-fishing-board-v1") || "[]"); } catch(e){}
+mine.forEach(function(c){ c.holder = "YOU"; });
+var all = SEEDS.concat(mine);
+function daysHeld(when){
+  var d = Math.floor((Date.now() - new Date(when).getTime()) / 86400000);
+  return d < 0 ? 0 : d;
+}
+function ageTag(a){ return a === "dinosaur" ? " · DINOSAUR" : (a === "old" ? " · OLD GROWTH" : ""); }
+function fishStr(c){ return c.len + " " + c.unit + " · " + c.lbs + " LB" + ageTag(c.age); }
+
+/* species records */
+var bySpecies = {};
+all.forEach(function(c){
+  if(!bySpecies[c.slug] || c.lbs > bySpecies[c.slug].lbs) bySpecies[c.slug] = c;
+});
+var recRows = Object.keys(bySpecies).map(function(k){ return bySpecies[k]; })
+  .sort(function(a, b){ return daysHeld(b.when) - daysHeld(a.when); });
+var rt = document.getElementById("records");
+recRows.forEach(function(c, i){
+  var tr = document.createElement("tr");
+  tr.innerHTML = "<td class='plc'>" + (i + 1) + "</td><td>" + c.fish + "</td><td>" +
+    fishStr(c) + "</td><td class='" + (c.holder === "YOU" ? "you" : "house") + "'>" + c.holder +
+    "</td><td class='days'>" + daysHeld(c.when) + "d</td>";
+  rt.appendChild(tr);
+});
+
+/* placings: player's catches inside their species' top three */
+var placedCount = {};
+var placingsEl = document.getElementById("placings");
+var placed = [];
+mine.forEach(function(c){
+  var field = all.filter(function(x){ return x.slug === c.slug; })
+    .sort(function(a, b){ return b.lbs - a.lbs; });
+  var place = field.indexOf(c) + 1;
+  if(place >= 1 && place <= 3){ placed.push({ c: c, place: place }); placedCount[c.slug] = (placedCount[c.slug] || 0) + 1; }
+});
+if(!mine.length)
+  placingsEl.innerHTML = "<div class='empty'>No catches posted yet. Land a fish on any water and it posts here on its own.</div>";
+else if(!placed.length)
+  placingsEl.innerHTML = "<div class='empty'>Catches posted: " + mine.length + ". None inside a species top three yet — the house marks are standing.</div>";
+else {
+  var pt = document.createElement("table");
+  placed.sort(function(a, b){ return a.place - b.place; }).forEach(function(p){
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td class='plc'>#" + p.place + "</td><td>" + p.c.fish + "</td><td>" +
+      fishStr(p.c) + "</td><td class='you'>YOU</td><td>" + String(p.c.when).slice(0, 10) + "</td>";
+    pt.appendChild(tr);
+  });
+  placingsEl.appendChild(pt);
+}
+
+/* monster board */
+var monsters = all.filter(function(c){ return c.age === "old" || c.age === "dinosaur"; })
+  .sort(function(a, b){ return b.lbs - a.lbs; });
+var monEl = document.getElementById("monsters");
+if(!monsters.length) monEl.innerHTML = "<div class='empty'>No monsters yet.</div>";
+else {
+  var mt = document.createElement("table");
+  monsters.slice(0, 8).forEach(function(c){
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td class='monster'>" + (c.age === "dinosaur" ? "DINOSAUR" : "OLD GROWTH") +
+      "</td><td>" + c.fish + "</td><td>" + fishStr(c) + "</td><td class='" +
+      (c.holder === "YOU" ? "you" : "house") + "'>" + c.holder + "</td>";
+    mt.appendChild(tr);
+  });
+  monEl.appendChild(mt);
+}
+
+/* triangle watch */
+var triEl = document.getElementById("triangle");
+var speciesSeen = {};
+mine.forEach(function(c){ speciesSeen[c.slug] = c.fish; });
+var triLines = Object.keys(speciesSeen).map(function(slug){
+  var n = placedCount[slug] || 0;
+  return "<b>" + speciesSeen[slug] + "</b> — " + n + " of 3 placed" +
+    (n >= 3 ? " — <b>TRIANGLE ELIGIBLE ▲</b>" : "");
+});
+triEl.innerHTML = triLines.length ? triLines.join("<br>") :
+  "No species on the watch yet. Place three fish of one species — first, second, third, any mix — and the Arrangement Mount unlocks.";
+</script>
+</body>
+</html>
