@@ -207,17 +207,56 @@
       var AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) { vizNote.style.display = 'block'; return; }
       actx = new AC();
-      var src = actx.createMediaElementSource(audio);
-      analyser = actx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.55;
-      freqData = new Uint8Array(analyser.frequencyBinCount);
-      src.connect(analyser);
-      analyser.connect(actx.destination);
     } catch (e) {
-      analyser = null;
+      actx = null;
       vizNote.style.display = 'block';
+      return;
     }
+    // The graph is built ONLY once the context is confirmed
+    // running. Routing the element through a context that never
+    // runs would leave the music playing into a dead graph —
+    // status says PLAYING, the room hears nothing (the weak-seat
+    // failure this guards: a 2016-class browser whose audio
+    // context stays suspended). If the context won't run, the
+    // element stays wired straight to the speaker, the music
+    // plays, and the ribbons honestly rest.
+    var build = function () {
+      if (analyser || !actx) { return; }
+      try {
+        var src = actx.createMediaElementSource(audio);
+        analyser = actx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.55;
+        freqData = new Uint8Array(analyser.frequencyBinCount);
+        src.connect(analyser);
+        analyser.connect(actx.destination);
+      } catch (e) {
+        analyser = null;
+        vizNote.style.display = 'block';
+      }
+    };
+    if (actx.state === 'running') { build(); return; }
+    var settled = false;
+    var giveUp = function () {
+      if (settled) { return; }
+      settled = true;
+      if (!analyser) { vizNote.style.display = 'block'; }
+    };
+    try {
+      var p = actx.resume();
+      if (p && p.then) {
+        p.then(function () {
+          if (actx && actx.state === 'running') { settled = true; build(); }
+          else { giveUp(); }
+        }, giveUp);
+        // A resume that never settles must not hold the note
+        // hostage either — after a breath, judge by state.
+        setTimeout(function () {
+          if (actx && actx.state === 'running') { settled = true; build(); }
+          else { giveUp(); }
+        }, 1200);
+      } else { giveUp(); }
+    } catch (e) { giveUp(); }
   }
 
   // ---- the ribbons ------------------------------------------------
