@@ -62,7 +62,7 @@
   .mfill{height:100%;width:0%;transition:width .12s linear}
   .mzone{position:absolute;top:0;bottom:0;background:rgba(94,224,125,.25)}
   #controls{display:flex;gap:10px;margin-top:10px}
-  #btnAction{flex:1;font-size:18px;padding:16px;font-weight:800;letter-spacing:.1em}
+  #btnAction{flex:1;font-size:18px;padding:16px;font-weight:800;letter-spacing:.1em;touch-action:none}
   #btnSing{background:#3a2c10;border-color:#e8c85a;color:#e8c85a;font-weight:800}
 
   /* tackle box */
@@ -1186,9 +1186,15 @@ function pressDown(){
   else if(G.state === "retrieve" || G.state === "fight"){ G.reeling = true; }
 }
 function pressUp(){ G.reeling = false; }
-btnA.addEventListener("pointerdown", function(e){ e.preventDefault(); pressDown(); });
+/* HOLD-TO-REEL FIX (Holly's card, Nov 27): the hold died the moment a
+   finger slid — pointerleave fired pressUp mid-reel. The button now
+   takes pointer capture on press, so a finger moving along the button
+   (or sliding a little past its edge) keeps the hold until the finger
+   actually lifts; pointerleave no longer ends a reel. */
+btnA.addEventListener("pointerdown", function(e){ e.preventDefault();
+  try{ btnA.setPointerCapture(e.pointerId); }catch(_){ }
+  pressDown(); });
 btnA.addEventListener("pointerup", pressUp);
-btnA.addEventListener("pointerleave", pressUp);
 btnA.addEventListener("pointercancel", pressUp);
 document.addEventListener("keydown", function(e){
   if(e.code === "Space" && !e.repeat && document.getElementById("scrWater").classList.contains("on")){

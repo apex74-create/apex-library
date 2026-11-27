@@ -460,7 +460,9 @@ function Bubble(){
   this.x=0; this.y=0; this.vx=0; this.vy=0;
   this.K=5.0;      /* centering spring /s^2 */
   this.C=2.4;      /* damping /s — underdamped on purpose (zeta ~0.54) */
-  this.GAIN=1150;  /* px/s^2 at full tilt */
+  this.GAIN=700;   /* px/s^2 at full tilt — Holly's card (Nov 27): sensitivity
+                      was too high to control; 1150 -> 700, and the tilt
+                      multiplier in currentTilt 1.6 -> 1.15 with it */
 }
 Bubble.prototype.step=function(tiltX,tiltY,dt,halfW,halfH){
   var ax=tiltX*this.GAIN - this.K*this.x - this.C*this.vx;
@@ -857,8 +859,8 @@ var simPointing=null;
 function currentTilt(){
   if(simMode) return simTilt;
   if(orientLive&&orient.gamma!=null){
-    var tx=SH.clamp(Math.sin(SH.rad(orient.gamma))*1.6,-1,1);
-    var ty=SH.clamp(Math.sin(SH.rad((orient.beta||0)-90))*1.6,-1,1);
+    var tx=SH.clamp(Math.sin(SH.rad(orient.gamma))*1.15,-1,1);
+    var ty=SH.clamp(Math.sin(SH.rad((orient.beta||0)-90))*1.15,-1,1);
     return {x:tx,y:ty};
   }
   return {x:0,y:0};
@@ -1262,7 +1264,12 @@ function frame(now){
   /* bubble physics at a fixed 120 Hz step */
   physAcc+=dt; var t=currentTilt();
   var step=1/120;
-  while(physAcc>=step){ bubble.step(t.x,-t.y,step,W/2,H/2); physAcc-=step; }
+  /* MOVEMENT MAP FIX (Holly's card, Nov 27 — "inverted movement"): the two
+     axes disagreed about what the bubble IS. Y already ran buoyant (tilt
+     the top away, the bubble seeks the high side); X ran as a rolling
+     ball (tilt right, it ran right, downhill). The bubble's own law in
+     this code is buoyancy on both axes — X now obeys it too. */
+  while(physAcc>=step){ bubble.step(-t.x,-t.y,step,W/2,H/2); physAcc-=step; }
   var cx=W/2+bubble.x, cy=H/2+bubble.y;
 
   /* PERF (v1.2): blob detection reads the whole stage back (drawImage +
