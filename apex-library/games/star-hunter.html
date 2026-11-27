@@ -1,0 +1,1719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>STAR HUNTER — Apex Air Solutions</title>
+<style>
+  html,body{margin:0;padding:0;background:#04060e;height:100%;overflow:hidden;
+    font-family:"Courier New",ui-monospace,monospace;color:#cfe8ff;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+  #stage{position:fixed;inset:0}
+  canvas#view{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .plate{position:absolute;background:rgba(6,12,26,.78);border:1px solid #2b4a73;
+    border-radius:8px;padding:8px 10px;backdrop-filter:blur(2px)}
+  /* v1.3 — the readout cluster lives at the BOTTOM of the screen, in much
+     smaller divs; the top of the field is empty sky. #obsWin is the
+     observation window: the full lock readout in tight form, draggable
+     like the arrest portal, with an X that collapses it to #miniRead. */
+  #obsWin{position:relative;display:flex;flex-wrap:wrap;gap:3px 10px;align-items:center;
+    background:rgba(6,12,26,.78);border:1px solid #2b4a73;border-radius:8px;
+    font-size:11px;letter-spacing:.05em;padding:6px 8px;margin:0 6px 6px;
+    cursor:grab;touch-action:none;z-index:5}
+  #obsWin:active{cursor:grabbing}
+  #obsWin.fixed{position:fixed;margin:0}
+  #obsWin b{color:#7dffb0;font-weight:bold}
+  #obsWin .warn{color:#ffd76a}
+  #obsWin .bad{color:#ff8f8f}
+  /* v1.4 — the grip strip: the window's header, a full-width grab surface
+     a gloved finger cannot miss. The X rides its right end at full touch
+     size; a tap on it collapses, a drag that ends on it does not. */
+  #obsGrip{flex:1 1 100%;display:flex;align-items:center;justify-content:space-between;
+    min-height:32px;margin:-2px -3px 3px;padding:0 0 0 5px;cursor:grab;touch-action:none;
+    border-bottom:1px solid rgba(63,109,176,.55);color:#9fc6ee;
+    font-size:10px;letter-spacing:.16em}
+  #obsGrip:active{cursor:grabbing}
+  #obsX{min-width:48px;min-height:32px;padding:2px 10px;font-size:16px;
+    line-height:1.2;border-radius:6px;margin-left:10px}
+  #miniRead{display:none;flex-wrap:wrap;gap:3px 10px;align-items:center;
+    background:rgba(6,12,26,.78);border:1px solid #2b4a73;border-radius:8px;
+    font-size:11px;letter-spacing:.05em;padding:5px 8px;margin:0 6px 6px}
+  #miniRead b{color:#7dffb0;font-weight:bold}
+  #miniRead .warn{color:#ffd76a}
+  #miniRead .bad{color:#ff8f8f}
+  #bObsOpen{margin-left:auto;min-height:0;padding:4px 10px;font-size:11px}
+  #waveCv{display:block;width:100%;height:36px;background:rgba(6,12,26,.92);
+    border-top:1px solid #2b4a73}
+  #arrestBox{top:112px;right:10px;text-align:center;display:none;z-index:4;
+    cursor:grab;touch-action:none}
+  #arrestBox:active{cursor:grabbing}
+  #arrestBox canvas{width:132px;height:132px;border:1px solid #2b4a73;border-radius:6px;background:#000}
+  #arrestBox .cap{font-size:11px;color:#9fc6ee;margin-top:4px;letter-spacing:.08em}
+  #bottomStack{position:absolute;left:0;right:0;bottom:0;z-index:4}
+  #banner{display:none;font-size:15px;line-height:1.3;letter-spacing:.04em;text-align:center;
+    color:#eafff2;background:rgba(6,12,26,.9);border-top:1px solid #2b4a73;
+    padding:7px 12px;min-height:20px}
+  #bar{display:flex;flex-wrap:wrap;gap:8px;
+    justify-content:center;padding:10px 8px calc(10px + env(safe-area-inset-bottom));
+    background:linear-gradient(to top,rgba(2,4,10,.92),rgba(2,4,10,0))}
+  button{font:inherit;font-size:14px;letter-spacing:.08em;color:#dff2ff;background:#0a1830;
+    border:1px solid #3f6db0;border-radius:8px;padding:12px 14px;min-height:48px;cursor:pointer}
+  button:active,button.on{background:#17457e;color:#fff}
+  button.amber{border-color:#b07f3f;color:#ffd76a}
+  .sheet{position:absolute;inset:0;background:rgba(2,4,10,.9);display:none;
+    flex-direction:column;padding:18px;box-sizing:border-box;z-index:5}
+  .sheet.open{display:flex}
+  .sheet h2{margin:2px 0 10px;font-size:17px;letter-spacing:.1em;color:#eafff2}
+  .sheet .body{overflow-y:auto;flex:1;font-size:13px;line-height:1.55}
+  .sheet .row{display:flex;justify-content:space-between;align-items:center;gap:8px;
+    padding:9px 6px;border-bottom:1px solid #16304f}
+  .stepper{display:flex;align-items:center;gap:8px}
+  .stepper button{min-height:40px;padding:6px 12px}
+  .stepper .val{min-width:86px;text-align:center;font-size:16px;color:#7dffb0}
+  #schemeRow{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 6px}
+  .schemeBtn{flex:1 1 30%;min-height:44px;text-align:left}
+  .schemeBtn .sw{display:inline-block;width:12px;height:12px;border-radius:3px;
+    margin-right:7px;vertical-align:-1px;border:1px solid rgba(255,255,255,.4)}
+  #presetRow{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px}
+  .preset{flex:1 1 46%;text-align:left;padding:9px 11px;min-height:0}
+  .preset .phz{font-size:16px;color:#7dffb0;letter-spacing:.06em}
+  .preset .prt{font-size:11px;color:#ffd76a;letter-spacing:.1em;margin-left:8px}
+  .preset .pwhy{display:block;font-size:11px;color:#9fc6ee;line-height:1.45;margin-top:3px;letter-spacing:0}
+  #postureSvg{display:block;margin:6px auto}
+  .words{text-align:center;font-size:15px;line-height:1.9;letter-spacing:.12em;color:#eafff2}
+  .small{font-size:11.5px;color:#9fc6ee;line-height:1.5}
+  .logline{border-bottom:1px solid #16304f;padding:7px 2px;word-break:break-word}
+  .logline img{width:54px;height:54px;vertical-align:middle;border:1px solid #2b4a73;margin-right:8px}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="view"></canvas>
+
+  <div id="arrestBox" class="plate">
+    <canvas id="crop" width="264" height="264"></canvas>
+    <div class="cap">ARRESTED — BLOWN UP 3×<br>DRAG TO MOVE</div>
+  </div>
+
+  <div id="bottomStack">
+    <div id="banner"></div>
+    <!-- v1.3: the observation window — the full lock readout, tight and
+         small, living at the bottom. Drag it like the arrest portal;
+         the X collapses it to the minimal strip below. -->
+    <div id="obsWin">
+      <div id="obsGrip"><span>≡ LOCK READOUT — DRAG TO MOVE</span><button id="obsX" title="Collapse the observation window">×</button></div>
+      <span id="hMode">MODE <b>FREE HUNT</b></span>
+      <span id="hLock">LOCK <b>—</b></span>
+      <span id="hHold">HOLD <b>0.0s</b></span>
+      <span id="hDrift">DRIFT <b>—</b></span>
+      <span id="hStasis">STASIS <b>—</b></span>
+      <span id="hPoint">POINTING <b>NO MEASURE</b></span>
+      <span id="hFocus">FOCUS <b>—</b></span>
+      <span id="hFix">FIX <b class="warn">NONE</b></span>
+      <span id="hSteer" style="display:none">STEER <b>—</b></span>
+    </div>
+    <div id="miniRead">
+      <span id="mLock">LOCK <b>—</b></span>
+      <span id="mHold">HOLD <b>0.0s</b></span>
+      <span id="mPoint">POINTING <b>NO MEASURE</b></span>
+      <button id="bObsOpen">READOUT</button>
+    </div>
+    <canvas id="waveCv" width="420" height="36"></canvas>
+    <div id="bar">
+      <button id="bCam">CAMERA</button>
+      <button id="bSensors">SENSORS</button>
+      <button id="bChart">CHART</button>
+      <button id="bGuide" class="amber">GUIDE-IN</button>
+      <button id="bTone">TONE</button>
+      <button id="bLog">LOG</button>
+    </div>
+  </div>
+
+  <!-- CHART / TARGET MODE -->
+  <div id="chartSheet" class="sheet">
+    <h2>CHART — PICK A STAR, HUNT IT BY NAME</h2>
+    <div class="small">OVERLAY COLOUR — the chart marks, the tri-star ring, and the banner
+      accents recolour. The camera picture itself never changes; only the drawn layer does.
+      The choice is kept on this handset.</div>
+    <div id="schemeRow"></div>
+    <div class="small" style="margin-bottom:10px">SKY is the blue it has always worn.
+      NIGHT RED is the night watch: red light leaves your night vision intact — red is the
+      way to go at night. DAY is dark ink with a light edge, made to hold against a bright
+      sky. EMBER and SPECTRAL GREEN are there because an eye that works all night
+      should get to choose its colour.</div>
+    <div class="small" id="chartNote">Needs a position fix and live pointing. UP means the star is
+      above your horizon right now, by the chart's math. NO MEASURE where the fix is missing.</div>
+    <div class="body" id="chartList"></div>
+    <button id="bChartClose">CLOSE</button>
+  </div>
+
+  <!-- TONE FOCUS GENERATOR -->
+  <div id="toneSheet" class="sheet">
+    <h2>TONE FOCUS GENERATOR</h2>
+    <div class="body">
+      <div class="small">A low concentration tone with a slow wobble, split for earbuds:
+        the carrier in one ear, the carrier plus the beat offset in the other. The two together
+        make the beat. The numbers are yours — dial them in. Nothing here is a house frequency
+        and nothing is claimed for the tone but focus: it steadies as the lock holds and it
+        stops when the lock is released or you leave the mode. Volume starts low;
+        the whole range of the device is yours from there.</div>
+      <div class="row"><span>CARRIER — Hz</span>
+        <span class="stepper"><button data-step="carrier,-5">−5</button>
+        <span class="val" id="vCarrier">420</span><button data-step="carrier,5">+5</button></span></div>
+      <div class="small" style="margin-top:10px">PRESETS — a starting seat, never a lock.
+        Tap one and the carrier dial moves to it; the dial stays free afterwards, and stepping
+        off a preset reads FREE DIAL in the log. ROOT is the digital root: the digits added
+        down to one digit, plain arithmetic. Each line says what the number is —
+        tradition labelled as tradition, fact as fact.</div>
+      <div id="presetRow"></div>
+      <div class="row"><span>BEAT OFFSET — Hz</span>
+        <span class="stepper"><button data-step="beat,-0.5">−0.5</button>
+        <span class="val" id="vBeat">4.0</span><button data-step="beat,0.5">+0.5</button></span></div>
+      <div class="row"><span>VOLUME</span>
+        <span class="stepper"><button data-step="vol,-0.05">−</button>
+        <span class="val" id="vVol">20%</span><button data-step="vol,0.05">+</button></span></div>
+      <div class="small" style="padding:6px">Volume runs 0–100% — the full range of the
+        device, no house cap; the operator owns it. With earbuds in, climb slow past
+        about 70%: a steady tone that loud is hard on ears. On the handset speaker
+        in open air, you'll want it up — that's what the range is for.</div>
+      <div class="row"><span>TONE</span><button id="bToneToggle">START TONE</button></div>
+      <div class="small">Carrier range 40–900 Hz · beat offset 0–40 Hz · volume 0–100%.
+        Settings ride into the session log with every hold.</div>
+    </div>
+    <button id="bToneClose">CLOSE</button>
+  </div>
+
+  <!-- GUIDE-IN POSTURE PLATE -->
+  <div id="postureSheet" class="sheet">
+    <h2 style="text-align:center">GUIDE-IN</h2>
+    <svg id="postureSvg" width="170" height="230" viewBox="0 0 170 230">
+      <g stroke="#7dffb0" stroke-width="2.5" fill="none" stroke-linecap="round">
+        <circle cx="85" cy="118" r="13"/>
+        <line x1="85" y1="131" x2="85" y2="182"/>
+        <line x1="85" y1="142" x2="58" y2="96"/>
+        <line x1="85" y1="142" x2="112" y2="96"/>
+        <line x1="58" y1="96" x2="80" y2="52"/>
+        <line x1="112" y1="96" x2="90" y2="52"/>
+        <line x1="85" y1="182" x2="66" y2="222"/>
+        <line x1="85" y1="182" x2="104" y2="222"/>
+      </g>
+      <rect x="76" y="26" width="18" height="28" rx="3" fill="none" stroke="#ffd76a" stroke-width="2.5"/>
+      <g stroke="#3f6db0" stroke-width="1.6" fill="none">
+        <path d="M85 8 L92 22 L78 22 Z"/>
+        <circle cx="85" cy="18" r="2.4" fill="#ffd76a" stroke="none"/>
+      </g>
+    </svg>
+    <div class="words">HOLD THE PHONE OVERHEAD<br>ARMS UP — PRAYER SHAPE<br>
+      LEVEL THE BUBBLE ON THE LIGHT<br>BREATHE — FOCUS<br>
+      INTENT FORWARD · OPEN TO RECEIVE<br>
+      ONE BEAT — EYE AND EAR TOGETHER</div>
+    <div class="small" style="text-align:center;margin-top:8px">Your body is the mount and the antenna.
+      The instrument holds the tone and the log; the measures it writes are hold time, drift,
+      and lock quality — nothing more, nothing claimed past them.</div>
+    <button id="bPostureGo" class="amber" style="margin-top:12px">BEGIN — HOLD THE LOCK</button>
+    <button id="bPostureClose">NOT NOW</button>
+  </div>
+
+  <!-- LOG -->
+  <div id="logSheet" class="sheet">
+    <h2>SESSION LOG</h2>
+    <div class="small" id="logState">Chain: —</div>
+    <div class="body">
+      <div id="aboutChart" class="small" style="border-bottom:1px solid #16304f;padding-bottom:9px;margin-bottom:4px">
+        <b style="color:#eafff2">ABOUT — CHART DATA &amp; HOW TO HUNT</b><br>
+        Raise the handset. Rear camera to the sky. Slide the tri-star ring like a
+        bubble in a glass — tilt, don't push. Settle it on a bright light and hold
+        it there. The ring does the rest.<br>
+        Chart data: open-source bright-star catalogue (Yale Bright Star
+        Catalog class, via the public brightest-stars list), J2000, bundled in this file.
+        A name is printed only when the pointing solution earns it.
+        The ring is rendered, not photographed — it is always sharp. The sky behind it
+        may breathe in and out of focus; the ring never does. That is the design:
+        a stable anchor in a breathing field.<br>
+        The arrested picture is a viewer portal: drag it anywhere on the screen and
+        let go — it stays where you dropped it. Horizon work puts the field of
+        interest at the top, so drag the portal down; overhead work puts the star
+        toward the bottom, so drag it up.<br>
+        The readout lives at the bottom of the screen, under the sky, in the
+        observation window — drag it the same way, or tap its X to fold it down
+        to the minimal strip: lock readout and the frequency wave stay. The wave
+        strip draws the tone the generator is making — carrier plus beat, the
+        envelope is the beat — and reads TONE OFF when the tone is off.<br>
+        The drawn layer has a colour assembly, on the CHART sheet: SKY, NIGHT RED,
+        EMBER, SPECTRAL GREEN, DAY. It recolours the chart marks, the ring, and the
+        banner accents — never the camera picture. Red at night, because red light
+        leaves your night vision intact; DAY when the sky is bright, dark ink with
+        a light edge so the marks hold against it.
+      </div>
+      <div id="logList"></div>
+    </div>
+    <button id="bExport">EXPORT SESSION (.JSON)</button>
+    <button id="bLogClose">CLOSE</button>
+  </div>
+</div>
+
+<video id="cam" playsinline muted autoplay style="display:none"></video>
+
+<script id="sh-core">
+"use strict";
+/* STAR HUNTER — CORE. Pure logic, no DOM. The bench loads this block directly.
+   Everything the face claims runs through here, so the bench grades the claims. */
+var SH = (function(){
+
+function rad(d){return d*Math.PI/180;}
+function deg(r){return r*180/Math.PI;}
+function clamp(v,a,b){return v<a?a:(v>b?b:v);}
+function wrap360(d){d=d%360;return d<0?d+360:d;}
+function wrap180(d){d=wrap360(d);return d>180?d-360:d;}
+function angSepDeg(ra1,dc1,ra2,dc2){
+  var s=Math.sin(rad(dc1))*Math.sin(rad(dc2))+
+        Math.cos(rad(dc1))*Math.cos(rad(dc2))*Math.cos(rad(ra1-ra2));
+  return deg(Math.acos(clamp(s,-1,1)));
+}
+function altAzSepDeg(alt1,az1,alt2,az2){
+  var s=Math.sin(rad(alt1))*Math.sin(rad(alt2))+
+        Math.cos(rad(alt1))*Math.cos(rad(alt2))*Math.cos(rad(az1-az2));
+  return deg(Math.acos(clamp(s,-1,1)));
+}
+
+/* ---- Open bright-star catalogue. [name, RA deg J2000, Dec deg J2000, V mag]
+   132 proper-named stars: every named star brighter than V 2.50 from the public
+   list, extended with named stars to V 3.00. Source class: Yale Bright Star
+   Catalog data as published in the open "List of brightest stars" (CC).
+   Compiled for offline use; credit on the face. */
+var CATALOG=[
+["Sirius",101.287,-16.716,-1.46],["Canopus",95.988,-52.696,-0.74],
+["Alpha Centauri",219.901,-60.835,-0.27],["Arcturus",213.915,19.182,-0.05],
+["Vega",279.235,38.784,0.03],["Capella",79.173,45.998,0.08],
+["Rigel",78.634,-8.202,0.13],["Procyon",114.825,5.225,0.34],
+["Achernar",24.429,-57.237,0.46],["Betelgeuse",88.793,7.407,0.50],
+["Hadar",210.956,-60.373,0.61],["Altair",297.696,8.868,0.76],
+["Acrux",186.650,-63.099,0.76],["Aldebaran",69.032,16.509,0.86],
+["Antares",247.352,-26.432,0.96],["Spica",201.298,-11.161,0.97],
+["Pollux",116.329,28.026,1.14],["Fomalhaut",344.413,-29.622,1.16],
+["Deneb",310.358,45.280,1.25],["Mimosa",191.930,-59.689,1.25],
+["Regulus",152.093,11.967,1.39],["Adhara",104.656,-28.972,1.50],
+["Castor",113.650,31.888,1.58],["Shaula",263.402,-37.104,1.63],
+["Gacrux",187.791,-57.113,1.64],["Bellatrix",81.283,6.350,1.64],
+["Elnath",81.573,28.608,1.65],["Miaplacidus",138.300,-69.717,1.69],
+["Alnilam",84.053,-1.202,1.69],["Alnair",332.058,-46.961,1.74],
+["Alnitak",85.190,-1.943,1.77],["Alioth",193.507,55.960,1.77],
+["Dubhe",165.932,61.751,1.79],["Mirfak",51.081,49.861,1.82],
+["Wezen",107.098,-26.393,1.82],["Sargas",264.330,-42.998,1.84],
+["Kaus Australis",276.043,-34.385,1.85],["Avior",124.604,-59.509,1.86],
+["Alkaid",206.885,49.313,1.86],["Menkalinan",89.882,44.947,1.90],
+["Atria",252.166,-69.028,1.91],["Alhena",99.428,16.399,1.92],
+["Peacock",306.412,-56.735,1.94],["Alsephina",131.180,-54.708,1.96],
+["Mirzam",95.675,-17.956,1.98],["Polaris",37.954,89.264,1.98],
+["Alphard",141.897,-8.659,2.00],["Hamal",31.793,23.462,2.00],
+["Diphda",10.897,-17.987,2.02],["Mizar",200.981,54.925,2.04],
+["Nunki",283.816,-26.297,2.05],["Menkent",211.671,-36.370,2.06],
+["Alpheratz",2.097,29.091,2.06],["Mirach",17.433,35.621,2.07],
+["Rasalhague",263.734,12.554,2.07],["Kochab",222.676,74.156,2.08],
+["Saiph",86.939,-9.670,2.09],["Denebola",177.265,14.572,2.11],
+["Algol",47.042,40.956,2.12],["Tiaki",340.087,-46.884,2.15],
+["Muhlifain",190.381,-48.960,2.21],["Aspidiske",139.273,-59.276,2.21],
+["Suhail",137.085,-43.432,2.21],["Alphecca",233.672,26.715,2.23],
+["Mintaka",83.002,-0.299,2.23],["Sadr",305.557,40.257,2.23],
+["Eltanin",269.152,51.489,2.23],["Schedar",10.127,56.537,2.24],
+["Naos",120.896,-40.003,2.25],["Almach",30.975,42.330,2.26],
+["Caph",2.295,59.149,2.28],["Izar",221.247,27.074,2.29],
+["Dschubba",239.713,-22.622,2.31],["Larawag",254.946,-34.293,2.31],
+["Merak",165.460,56.382,2.37],["Ankaa",6.571,-42.306,2.38],
+["Girtab",265.620,-39.017,2.39],["Enif",326.046,9.875,2.40],
+["Scheat",345.944,28.082,2.42],["Sabik",257.588,-15.724,2.43],
+["Phecda",178.457,53.695,2.44],["Aludra",111.024,-29.303,2.45],
+["Alderamin",319.645,62.585,2.46],["Markeb",140.519,-55.010,2.46],
+["Tiansi",14.177,60.717,2.47],["Markab",346.190,15.205,2.48],
+["Aljanah",305.114,33.971,2.48],["Acrab",241.359,-19.805,2.50],
+["Algieba",154.993,19.841,2.08],["Regor",122.383,-47.336,1.83],
+["Zubeneschamali",229.252,-9.383,2.61],["Ascella",285.653,-29.880,2.60],
+["Zosma",168.527,20.523,2.56],["Han",249.290,-10.567,2.56],
+["Uridim",220.480,-47.393,2.30],["Menkar",45.570,4.090,2.53],
+["Zubenelgenubi",222.720,-16.042,2.75],["Unukalhai",236.066,6.426,2.63],
+["Kornephoros",236.590,21.490,2.77],["Cebalrai",265.868,4.567,2.77],
+["Yed Prior",243.586,-3.694,2.74],["Porrima",190.415,-1.449,2.74],
+["Tarazed",296.565,10.613,2.72],["Kaus Media",275.263,-29.828,2.72],
+["Lesath",262.689,-37.296,2.69],["Hassaleh",74.246,33.166,2.69],
+["Muphrid",208.672,18.397,2.68],["Ruchbah",21.454,60.235,2.68],
+["Mahasim",89.929,37.212,2.65],["Sheratan",26.611,20.808,2.64],
+["Sadalsuud",322.890,-5.571,2.90],["Sadalmelik",331.446,-0.319,2.94],
+["Matar",340.366,30.221,2.94],["Algenib",3.309,15.184,2.84],
+["Deneb Algedi",326.750,-16.127,2.85],["Vindemiatrix",195.545,10.959,2.85],
+["Mebsuta",98.830,25.131,2.86],["Tejat",91.590,22.513,2.86],
+["Acamar",44.565,-40.305,2.88],["Zaurak",59.507,-13.508,2.89],
+["Gomeisa",116.537,8.289,2.89],["Cursa",76.962,-5.086,2.78],
+["Rastaban",262.609,52.301,2.79],["Imai",183.786,-58.748,2.79],
+["Kaus Borealis",276.990,-25.421,2.82],["Paikauhale",248.967,-28.216,2.82],
+["Tureis",121.885,-24.308,2.83],["Algenubi",146.885,23.774,2.98],
+["Alnasl",271.452,-30.424,2.98],["Furud",95.078,-30.096,3.00],
+["Alheka",84.411,21.142,3.00],["Pherkad",230.182,71.834,3.00]
+];
+
+/* ---- Astronomy: time, pointing solution, chart projection ---- */
+function jdFromMs(ms){return ms/86400000+2440587.5;}
+function gmstDeg(ms){
+  var jd=jdFromMs(ms), T=(jd-2451545.0)/36525;
+  return wrap360(280.46061837+360.98564736629*(jd-2451545.0)
+    +0.000387933*T*T-T*T*T/38710000);
+}
+function lstDeg(ms,lonDeg){return wrap360(gmstDeg(ms)+lonDeg);}
+function radecToAltAz(ra,dec,lat,lon,ms){
+  var H=rad(lstDeg(ms,lon)-ra), d=rad(dec), p=rad(lat);
+  var alt=Math.asin(clamp(Math.sin(d)*Math.sin(p)+
+    Math.cos(d)*Math.cos(p)*Math.cos(H),-1,1));
+  var azS=Math.atan2(Math.sin(H),
+    Math.cos(H)*Math.sin(p)-Math.tan(d)*Math.cos(p)); /* from south, +west */
+  return {alt:deg(alt), az:wrap360(deg(azS)+180)};    /* to from-north */
+}
+function altAzToRaDec(alt,az,lat,lon,ms){
+  var a=rad(alt), p=rad(lat);
+  /* celestial pole and meridian-equator directions in ENU */
+  var vE=Math.cos(a)*Math.sin(rad(az)), vN=Math.cos(a)*Math.cos(rad(az)), vU=Math.sin(a);
+  var pole={e:0,n:Math.cos(p),u:Math.sin(p)};
+  var mer ={e:0,n:-Math.sin(p),u:Math.cos(p)};
+  var sd=vE*pole.e+vN*pole.n+vU*pole.u;
+  var dec=deg(Math.asin(clamp(sd,-1,1)));
+  var H=deg(Math.atan2(-vE, vE*mer.e+vN*mer.n+vU*mer.u));
+  /* sinH = -vE/cos(dec), cosH = (v·m̂)/cos(dec); cos(dec) cancels in atan2 */
+  return {ra:wrap360(lstDeg(ms,lon)-H), dec:dec, hourAngle:H};
+}
+function catalogNear(ra,dec,radiusDeg){
+  var out=[];
+  for(var i=0;i<CATALOG.length;i++){
+    var s=angSepDeg(ra,dec,CATALOG[i][1],CATALOG[i][2]);
+    if(s<=radiusDeg) out.push({name:CATALOG[i][0],ra:CATALOG[i][1],
+      dec:CATALOG[i][2],mag:CATALOG[i][3],sep:s});
+  }
+  out.sort(function(a,b){return a.sep-b.sep;});
+  return out;
+}
+/* Gnomonic chart projection. Returns {x,y} in px or null if off/behind. */
+function projectToFrame(sAlt,sAz,pAlt,pAz,fovDeg,w,h){
+  function vec(alt,az){var a=rad(alt),z=rad(az);
+    return [Math.cos(a)*Math.sin(z),Math.cos(a)*Math.cos(z),Math.sin(a)];} /* E,N,U */
+  var p=vec(pAlt,pAz), s=vec(sAlt,sAz);
+  var up=[0,0,1];
+  var pdotu=p[0]*up[0]+p[1]*up[1]+p[2]*up[2];
+  var u=[up[0]-p[0]*pdotu, up[1]-p[1]*pdotu, up[2]-p[2]*pdotu];
+  var ul=Math.hypot(u[0],u[1],u[2]);
+  if(ul<1e-6){u=[0,1,0];} else {u=[u[0]/ul,u[1]/ul,u[2]/ul];}
+  var r=[p[1]*u[2]-p[2]*u[1], p[2]*u[0]-p[0]*u[2], p[0]*u[1]-p[1]*u[0]]; /* screen right = forward x up */
+  var denom=s[0]*p[0]+s[1]*p[1]+s[2]*p[2];
+  if(denom<0.25) return null;
+  var x=(s[0]*r[0]+s[1]*r[1]+s[2]*r[2])/denom;
+  var y=(s[0]*u[0]+s[1]*u[1]+s[2]*u[2])/denom;
+  var f=(w/2)/Math.tan(rad(fovDeg)/2);
+  var px=w/2+x*f, py=h/2-y*f;
+  if(px<-40||px>w+40||py<-40||py>h+40) return null;
+  return {x:px,y:py};
+}
+
+/* ---- Orientation -> rear-camera pointing (W3C angles, three.js convention).
+   q = Euler(beta, alpha, -gamma, 'YXZ') then rotX(-90°); camera looks down -Z;
+   three-world: +X east, -Z north, +Y up. ORIENT_SIGN is the one-line field fix
+   if a handset family reports beta with the opposite sign. */
+var ORIENT_SIGN=1;
+function quatAxis(ax,ang){
+  var s=Math.sin(ang/2);
+  return {x:ax[0]*s, y:ax[1]*s, z:ax[2]*s, w:Math.cos(ang/2)};
+}
+function quatFromEulerYXZ(x,y,z){
+  /* composed from axis quaternions (q = qY * qX * qZ) so the order is
+     correct by construction, not by a recalled formula */
+  return quatMul(quatAxis([0,1,0],y),
+         quatMul(quatAxis([1,0,0],x), quatAxis([0,0,1],z)));
+}
+function quatMul(a,b){
+  return { x:a.w*b.x+a.x*b.w+a.y*b.z-a.z*b.y,
+           y:a.w*b.y-a.x*b.z+a.y*b.w+a.z*b.x,
+           z:a.w*b.z+a.x*b.y-a.y*b.x+a.z*b.w,
+           w:a.w*b.w-a.x*b.x-a.y*b.y-a.z*b.z };
+}
+function quatApply(q,v){
+  var p={x:v[0],y:v[1],z:v[2],w:0};
+  var qc={x:-q.x,y:-q.y,z:-q.z,w:q.w};
+  var r=quatMul(quatMul(q,p),qc);
+  return [r.x,r.y,r.z];
+}
+function pointingFromOrientation(alpha,beta,gamma,screenDeg){
+  if(alpha==null||beta==null||gamma==null) return null;
+  beta=beta*ORIENT_SIGN;
+  /* alpha is applied negated: W3C alpha runs against the compass bearing,
+     and in this ENU read the negation is what makes a +90 turn of the
+     handset a +90 turn of the pointing azimuth (benched). */
+  var q=quatFromEulerYXZ(rad(beta),rad(-alpha),rad(-gamma));
+  var q1=quatFromEulerYXZ(rad(-90),0,0);
+  q=quatMul(q,q1);
+  if(screenDeg){ var q0=quatFromEulerYXZ(0,0,rad(-screenDeg)); q=quatMul(q,q0); }
+  var d=quatApply(q,[0,0,-1]); /* three-world dir */
+  var east=d[0], north=-d[2], up=d[1];
+  var alt=deg(Math.asin(clamp(up,-1,1)));
+  var az=wrap360(deg(Math.atan2(east,north)));
+  return {alt:alt, az:az};
+}
+
+/* ---- The bubble: a trapped air bubble in a slim glass of water, flat plane.
+   Tilt drives it buoyantly; a weak centering spring and light damping give the
+   overshoot-and-settle of a real bubble. It is NOT a rigid cursor. */
+function Bubble(){
+  this.x=0; this.y=0; this.vx=0; this.vy=0;
+  this.K=5.0;      /* centering spring /s^2 */
+  this.C=2.4;      /* damping /s — underdamped on purpose (zeta ~0.54) */
+  this.GAIN=1150;  /* px/s^2 at full tilt */
+}
+Bubble.prototype.step=function(tiltX,tiltY,dt,halfW,halfH){
+  var ax=tiltX*this.GAIN - this.K*this.x - this.C*this.vx;
+  var ay=tiltY*this.GAIN - this.K*this.y - this.C*this.vy;
+  this.vx+=ax*dt; this.vy+=ay*dt;
+  this.x+=this.vx*dt; this.y+=this.vy*dt;
+  /* soft glass walls: the slim container */
+  var mx=halfW*0.88, my=halfH*0.88;
+  if(this.x> mx){this.x= mx+(this.x-mx)*0.35; this.vx*=0.55;}
+  if(this.x<-mx){this.x=-mx+(this.x+mx)*0.35; this.vx*=0.55;}
+  if(this.y> my){this.y= my+(this.y-my)*0.35; this.vy*=0.55;}
+  if(this.y<-my){this.y=-my+(this.y+my)*0.35; this.vy*=0.55;}
+  return {x:this.x,y:this.y};
+};
+Bubble.prototype.speed=function(){return Math.hypot(this.vx,this.vy);};
+
+/* ---- Lock quality + the ARREST state machine ---- */
+var LOCK_Q=0.85, HOLD_MS=2000;
+function lockQuality(distPx,peakVar,ringSpeedPxS,hasBlob){
+  if(!hasBlob) return 0;
+  /* proximity GATES the quality: steadiness and stillness only count
+     once the ring is on the light. (Bench-caught: additive weights let
+     a steady hand "hold" empty sky at 0.45 — above the loss line.) */
+  var qd=clamp(1-distPx/150,0,1);
+  var qs=clamp(1-peakVar/900,0,1);
+  var qr=clamp(1-ringSpeedPxS/280,0,1);
+  return qd*(0.55+0.25*qs+0.20*qr);
+}
+function Arrest(){
+  this.aboveSince=null; this.locked=false; this.lockTimeMs=null;
+}
+Arrest.prototype.update=function(q,nowMs){
+  if(q>=LOCK_Q){
+    if(this.aboveSince==null) this.aboveSince=nowMs;
+    if(!this.locked && nowMs-this.aboveSince>=HOLD_MS){
+      this.locked=true; this.lockTimeMs=nowMs; return "LOCK";
+    }
+  } else if(q<LOCK_Q-0.07){
+    this.aboveSince=null;
+  }
+  return null;
+};
+Arrest.prototype.release=function(){ this.locked=false; this.aboveSince=null; this.lockTimeMs=null; };
+
+/* ---- Guide-in session: hold time, drift, lock quality — the whole log claim ---- */
+function GuideSession(startMs){
+  this.startMs=startMs; this.n=0;
+  this.sumSqDist=0; this.sumQ=0;
+  this.alt0=null; this.az0=null; this.maxPointDrift=0; this.lastMs=startMs;
+}
+GuideSession.prototype.sample=function(nowMs,distPx,q,pointing){
+  this.n++; this.lastMs=nowMs;
+  this.sumSqDist+=distPx*distPx; this.sumQ+=q;
+  if(pointing){
+    if(this.alt0==null){this.alt0=pointing.alt; this.az0=pointing.az;}
+    else{
+      var d=altAzSepDeg(this.alt0,this.az0,pointing.alt,pointing.az);
+      if(d>this.maxPointDrift) this.maxPointDrift=d;
+    }
+  }
+};
+GuideSession.prototype.stats=function(endMs){
+  return {
+    holdS:Math.round((endMs-this.startMs)/100)/10,
+    driftPx:this.n?Math.round(Math.sqrt(this.sumSqDist/this.n)*10)/10:0,
+    driftDeg:Math.round(this.maxPointDrift*100)/100,
+    meanQ:this.n?Math.round(this.sumQ/this.n*100)/100:0,
+    samples:this.n };
+};
+
+/* ---- Snapshot crop math: the arrested region, blown up ---- */
+function cropRect(frameW,frameH,cx,cy,ringR){
+  var side=Math.max(24,Math.round(ringR*2));
+  var sx=Math.round(clamp(cx-side/2,0,Math.max(0,frameW-side)));
+  var sy=Math.round(clamp(cy-side/2,0,Math.max(0,frameH-side)));
+  var sw=Math.min(side,frameW-sx), sh=Math.min(side,frameH-sy);
+  return {sx:sx,sy:sy,sw:sw,sh:sh};
+}
+
+/* ---- Identification — honest by construction.
+   A name is returned only when the pointing solution separates one catalogue
+   star from every other. Otherwise the read is a class, or NO MEASURE. */
+function identify(inp){
+  /* inp: {pointing:{alt,az}|null, lat, lon, ms, peak:0..255, motionDeg|null} */
+  var bright = inp.peak>=250?"BRILLIANT":(inp.peak>=225?"BRIGHT":"DIM");
+  if(inp.pointing && inp.lat!=null && inp.lon!=null && inp.pointing.alt>-2){
+    var rd=altAzToRaDec(inp.pointing.alt,inp.pointing.az,inp.lat,inp.lon,inp.ms);
+    var near=catalogNear(rd.ra,rd.dec,8);
+    if(near.length){
+      var a=near[0], b=near[1]||null;
+      if(a.sep<=3 && (!b || b.sep-a.sep>=3))
+        return {kind:"STAR", name:a.name, conf:"HIGH", sep:a.sep,
+          line:a.name.toUpperCase()+" — CHART MATCH, "+a.sep.toFixed(1)+"° OFF POINTING",
+          detail:"mag "+a.mag+" · catalogue position, J2000 · confidence HIGH — no other charted star within "+(b?b.sep.toFixed(1):"8")+"°"};
+      if(a.sep<=7.5 && b && b.sep-a.sep<4)
+        return {kind:"AMBIG", name:null, conf:"NO MEASURE", sep:a.sep,
+          line:"BETWEEN "+a.name.toUpperCase()+" AND "+b.name.toUpperCase()+" — NO MEASURE",
+          detail:"pointing solution cannot separate the candidates ("+a.sep.toFixed(1)+"° / "+b.sep.toFixed(1)+"°). The chart refuses to pick."};
+      if(a.sep<=7.5)
+        return {kind:"STAR", name:a.name, conf:"MEDIUM", sep:a.sep,
+          line:a.name.toUpperCase()+" — CHART MATCH, "+a.sep.toFixed(1)+"° OFF POINTING",
+          detail:"mag "+a.mag+" · confidence MEDIUM — compass-class pointing; verify by eye against the chart overlay"};
+    }
+    if(inp.motionDeg!=null && inp.motionDeg>2)
+      return {kind:"MOVING", name:null, conf:null, sep:null,
+        line:"MOVING LIGHT — AIRCRAFT CLASS",
+        detail:"it moved "+inp.motionDeg.toFixed(1)+"° against the sky between holds and matches no charted star. Plain read: traffic."};
+    if(inp.peak>=248)
+      return {kind:"BRIGHT", name:null, conf:"NO MEASURE", sep:null,
+        line:"VERY BRIGHT — NO STAR MATCH — NO MEASURE",
+        detail:"brighter than the chart's stars read at this gain; a planet is the usual suspect, but v1 charts stars only and will not guess."};
+    return {kind:"NOMATCH", name:null, conf:"NO MEASURE", sep:null,
+      line:"BRIGHT OBJECT — NO CHART MATCH — NO MEASURE",
+      detail:bright.toLowerCase()+" in frame, steady, and no charted star within 8° of the pointing solution."};
+  }
+  if(inp.motionDeg!=null && inp.motionDeg>2)
+    return {kind:"MOVING", name:null, conf:null, sep:null,
+      line:"MOVING LIGHT — AIRCRAFT CLASS",
+      detail:"it moved against the sky between holds. No pointing solution, so no chart name was attempted."};
+  return {kind:"UNKNOWN", name:null, conf:"NO MEASURE", sep:null,
+    line:"BRIGHT OBJECT — NO MEASURE",
+    detail:"no pointing solution yet (sensors / position fix). The instrument will not name what it cannot place."};
+}
+
+/* ---- Bright-blob picking with a COMPACTNESS preference (v1.3) ----
+   The owner's field catch (Nov 26, 14:21 EST), testing indoors: the blob
+   hunter chose a bright spot of FLOOR REFLECTION over the LED itself —
+   the broad wash out-summed the small source it was a reflection OF.
+   Total brightness cannot tell a source from its reflection; shape can.
+   Candidates are the connected regions above 60% of the frame peak, and
+   each is scored:
+     score = peak × edge × compactness × saturation
+     edge        = (peak − mean luminance just outside the region) / peak
+                   — a hard-edged source falls off a cliff; a wash fades.
+     compactness = 1 / (1 + area/60) — a broad wash pays for its area.
+     saturation  = 0.5 + 0.5 × (fraction of the region at full 250+).
+   A small saturated hard-edged source outranks a broad bright wash of
+   equal or GREATER total light. This only improves what the machine
+   SUGGESTS: the arrest still keys on the operator's settled bubble. */
+function pickBlobFromScan(lum,w,h){
+  var peak=0,i;
+  for(i=0;i<lum.length;i++) if(lum[i]>peak) peak=lum[i];
+  if(peak<150) return null;
+  var thr=Math.max(120,peak*0.6);
+  var seen=new Uint8Array(lum.length);
+  var best=null, stack=[];
+  for(var s=0;s<lum.length;s++){
+    if(seen[s]||lum[s]<thr) continue;
+    var area=0, sum=0, sx=0, sy=0, cpeak=0, sat=0, outSum=0, outN=0;
+    stack.length=0; stack.push(s); seen[s]=1;
+    while(stack.length){
+      var p=stack.pop(), px=p%w, py=(p/w)|0, v=lum[p];
+      area++; sum+=v; sx+=px; sy+=py;
+      if(v>cpeak)cpeak=v; if(v>=250)sat++;
+      var nb=[p-1,p+1,p-w,p+w];
+      var ok=[px>0,px<w-1,py>0,py<h-1];
+      for(var k=0;k<4;k++){
+        if(!ok[k]) continue;
+        var np=nb[k];
+        if(lum[np]>=thr){ if(!seen[np]){ seen[np]=1; stack.push(np); } }
+        else { outSum+=lum[np]; outN++; }
+      }
+    }
+    if(area<2) continue;
+    var outMean=outN?outSum/outN:cpeak;
+    var edge=clamp((cpeak-outMean)/Math.max(1,cpeak),0.12,1);
+    var compact=1/(1+area/60);
+    var score=cpeak*edge*compact*(0.5+0.5*(sat/area));
+    if(!best||score>best.score)
+      best={cx:sx/area, cy:sy/area, peak:Math.round(cpeak),
+        mean:Math.round(sum/area), rEq:Math.sqrt(area/Math.PI),
+        area:area, score:score};
+  }
+  return best;
+}
+
+/* ---- STASIS read — from lock steadiness ONLY. This is a measure of the
+   instrument and the hand, never of the operator's body: there is no
+   biofeedback in v1. The headset's lane is reserved in the log schema
+   (BIO_LANE) and reads NO MEASURE until a headset exists to fill it. */
+var STASIS_DRIFT_PX=25, STASIS_HOLD_S=20;
+var BIO_LANE={lane:"RESERVED", feed:"NO MEASURE — no headset on hand",
+  hrv:null, eeg:null, gsr:null};
+function stasisRead(stats){
+  var steady = stats.holdS>=STASIS_HOLD_S && stats.driftPx<STASIS_DRIFT_PX;
+  return { steady:steady,
+    label: steady ? "STASIS — LOCK STEADY" : "NOT STEADY",
+    basis: "lock steadiness only: hold >= "+STASIS_HOLD_S+"s and RMS drift < "+STASIS_DRIFT_PX+"px" };
+}
+
+/* ---- Target mode steering, plain words ---- */
+function steerText(targetAltAz, pointing){
+  if(!pointing) return "NO POINTING — NO MEASURE";
+  var dAz=wrap180(targetAltAz.az-pointing.az);
+  var dAlt=targetAltAz.alt-pointing.alt;
+  var parts=[];
+  if(Math.abs(dAz)>1.5) parts.push((dAz>0?"TURN RIGHT ":"TURN LEFT ")+Math.abs(Math.round(dAz))+"°");
+  if(Math.abs(dAlt)>1.5) parts.push((dAlt>0?"RAISE ":"LOWER ")+Math.abs(Math.round(dAlt))+"°");
+  if(!parts.length) return "ON TARGET — SETTLE THE BUBBLE ON THE LIGHT";
+  return parts.join(" · ");
+}
+
+/* ---- Session log with an integrity chain (FNV-1a, tamper-evident) ---- */
+function fnv1a(str){
+  var h=0x811c9dc5;
+  for(var i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; }
+  return ("0000000"+h.toString(16)).slice(-8);
+}
+function LogChain(){ this.entries=[]; }
+LogChain.prototype.append=function(entry){
+  var prev=this.entries.length?this.entries[this.entries.length-1].h:"GENESIS";
+  var body=JSON.stringify(entry);
+  var e={}; for(var k in entry) e[k]=entry[k];
+  e.h=fnv1a(prev+"|"+body);
+  this.entries.push(e); return e;
+};
+LogChain.verify=function(entries){
+  var prev="GENESIS";
+  for(var i=0;i<entries.length;i++){
+    var e=entries[i], copy={};
+    for(var k in e) if(k!=="h") copy[k]=e[k];
+    if(fnv1a(prev+"|"+JSON.stringify(copy))!==e.h) return {ok:false,at:i};
+    prev=e.h;
+  }
+  return {ok:true,at:entries.length};
+};
+
+return {
+  rad:rad,deg:deg,clamp:clamp,wrap360:wrap360,wrap180:wrap180,
+  angSepDeg:angSepDeg, altAzSepDeg:altAzSepDeg,
+  CATALOG:CATALOG, jdFromMs:jdFromMs, gmstDeg:gmstDeg, lstDeg:lstDeg,
+  radecToAltAz:radecToAltAz, altAzToRaDec:altAzToRaDec, catalogNear:catalogNear,
+  projectToFrame:projectToFrame, pointingFromOrientation:pointingFromOrientation,
+  Bubble:Bubble, lockQuality:lockQuality, LOCK_Q:LOCK_Q, HOLD_MS:HOLD_MS,
+  Arrest:Arrest, GuideSession:GuideSession, cropRect:cropRect,
+  pickBlobFromScan:pickBlobFromScan,
+  identify:identify, steerText:steerText, LogChain:LogChain, fnv1a:fnv1a,
+  stasisRead:stasisRead, BIO_LANE:BIO_LANE,
+  STASIS_DRIFT_PX:STASIS_DRIFT_PX, STASIS_HOLD_S:STASIS_HOLD_S
+};
+})();
+</script>
+
+<script>
+"use strict";
+/* STAR HUNTER — FACE. Camera, sensors, render, tone. All claims run through SH. */
+var $=function(id){return document.getElementById(id);};
+var cv=$("view"), ctx=cv.getContext("2d");
+var W=0,H=0,DPR=1;
+function sizeCanvas(){
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  W=window.innerWidth; H=window.innerHeight;
+  cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+  var wv=document.getElementById("waveCv");
+  if(wv){ wv.width=W; wv.height=36; }
+}
+window.addEventListener("resize",sizeCanvas); sizeCanvas();
+
+/* ---------- state ---------- */
+var bubble=new SH.Bubble();
+var arrest=new SH.Arrest();
+var guide=null;              /* active GuideSession or null */
+var guideArmed=false;        /* posture plate passed, guide-in live */
+var targetStar=null;         /* {name,ra,dec,mag} in TARGET MODE */
+var camStream=null, camOn=false, demoSky=true;
+var orient={alpha:null,beta:null,gamma:null}, orientLive=false;
+var tilt={x:0,y:0};
+var fix=null;                /* {lat,lon} */
+var blob=null;               /* {x,y,peak,mean,r} in CSS px */
+var peakHist=[];
+var lastArrests=[];          /* pointing at each arrest, for motion across holds */
+var spin=0, lockFlash=0;
+var beatPhase=0;             /* THE shared clock: cycles of the operator's beat.
+                                Tone, ring pulse and ring spin all read this one
+                                phase — one process, not three decorations. */
+var focusPlan="NO CAMERA", focusState="—";
+var simMode=false, simTilt={x:0,y:0}, simBlob=null;
+var log=new SH.LogChain();
+try{
+  var saved=localStorage.getItem("starhunter.log.v1");
+  if(saved){ var parsed=JSON.parse(saved); if(Array.isArray(parsed)) log.entries=parsed; }
+}catch(e){}
+function persistLog(){ try{ localStorage.setItem("starhunter.log.v1",JSON.stringify(log.entries)); }catch(e){} }
+
+/* ---------- demo sky (no camera): seeded stars + one bright arrestable blob ---------- */
+var demoStars=[], demoBlobPos={fx:0.68,fy:0.30};
+(function(){
+  var s=1979; function rnd(){ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; }
+  for(var i=0;i<210;i++) demoStars.push({fx:rnd(),fy:rnd()*0.92,r:0.4+rnd()*1.1,tw:rnd()*6.28});
+  demoBlobPos={fx:0.30+0.4*rnd(),fy:0.18+0.3*rnd()};
+})();
+
+/* ---------- camera ---------- */
+var video=$("cam");
+function startCamera(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    toast("NO CAMERA API — DEMO SKY"); return;
+  }
+  /* PERF (v1.2): ask for a MODEST stream — 720p-class, 30 fps capped — never
+     the sensor's max. The owner's field report: the tri-star overlay moved
+     fluidly while the camera path ran "slow and poppy"; the stream's native
+     resolution is the heavy end of that path, so the request is capped here. */
+  navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",
+    width:{ideal:1280,max:1920}, height:{ideal:720,max:1080},
+    frameRate:{ideal:30,max:30}},audio:false})
+  .then(function(st){
+    camStream=st; video.srcObject=st; camOn=true; demoSky=false;
+    $("bCam").classList.add("on"); toast("CAMERA LIVE — REAR");
+    /* FOCUS LAW capability read, up front and honest */
+    try{
+      var track=st.getVideoTracks()[0];
+      var caps=track.getCapabilities?track.getCapabilities():{};
+      if(caps.focusMode&&caps.focusMode.indexOf("manual")>=0) focusPlan="MANUAL-INFINITY";
+      else if(caps.focusMode&&caps.focusMode.indexOf("single-shot")>=0) focusPlan="SINGLE-SHOT";
+      else focusPlan="FREE";
+      focusState=focusPlan==="FREE"?"FOCUS FREE":"FREE UNTIL ARREST";
+    }catch(e){ focusPlan="FREE"; focusState="FOCUS FREE"; }
+    $("hFocus").innerHTML="FOCUS <b>"+focusState+"</b>";
+  }).catch(function(){ toast("CAMERA REFUSED — DEMO SKY"); });
+}
+/* FOCUS LAW — on arrest, lock the focus so the servo stops hunting the hold.
+   Manual focus goes to infinity (the far end of the track's own range).
+   If the handset will not grant a lock, the face says FOCUS FREE — plainly. */
+function lockFocus(){
+  if(!camStream){ focusState="NO CAMERA"; return; }
+  var track=camStream.getVideoTracks()[0];
+  if(focusPlan==="FREE"){ focusState="FOCUS FREE"; $("hFocus").innerHTML="FOCUS <b class='warn'>FREE</b>"; return; }
+  var adv={};
+  try{
+    var caps=track.getCapabilities();
+    if(focusPlan==="MANUAL-INFINITY"){
+      adv.focusMode="manual";
+      if(caps.focusDistance) adv.focusDistance=caps.focusDistance.max; /* infinity end */
+    } else adv.focusMode="single-shot";
+    track.applyConstraints({advanced:[adv]}).then(function(){
+      focusState="LOCKED ("+focusPlan+")";
+      $("hFocus").innerHTML="FOCUS <b>"+focusState+"</b>";
+    }).catch(function(){
+      focusState="FOCUS FREE"; focusPlan="FREE";
+      $("hFocus").innerHTML="FOCUS <b class='warn'>FREE</b>";
+    });
+  }catch(e){ focusState="FOCUS FREE"; $("hFocus").innerHTML="FOCUS <b class='warn'>FREE</b>"; }
+}
+function unlockFocus(){
+  if(!camStream||focusPlan==="FREE") return;
+  try{
+    var track=camStream.getVideoTracks()[0];
+    var caps=track.getCapabilities?track.getCapabilities():{};
+    if(caps.focusMode&&caps.focusMode.indexOf("continuous")>=0)
+      track.applyConstraints({advanced:[{focusMode:"continuous"}]}).catch(function(){});
+    focusState="FREE UNTIL ARREST";
+    $("hFocus").innerHTML="FOCUS <b>"+focusState+"</b>";
+  }catch(e){}
+}
+function stopCamera(){
+  if(camStream){ camStream.getTracks().forEach(function(t){t.stop();}); }
+  camStream=null; camOn=false; demoSky=true; $("bCam").classList.remove("on");
+}
+
+/* ---------- sensors ---------- */
+function startSensors(){
+  function go(){
+    window.addEventListener("deviceorientation",function(ev){
+      orient.alpha=ev.alpha; orient.beta=ev.beta; orient.gamma=ev.gamma;
+      orientLive=(ev.beta!=null);
+    },true);
+    $("bSensors").classList.add("on"); toast("SENSORS LIVE");
+  }
+  if(typeof DeviceOrientationEvent!=="undefined" &&
+     typeof DeviceOrientationEvent.requestPermission==="function"){
+    DeviceOrientationEvent.requestPermission().then(function(r){
+      if(r==="granted") go(); else toast("SENSORS REFUSED");
+    }).catch(function(){ toast("SENSORS REFUSED"); });
+  } else go();
+  if(navigator.geolocation){
+    navigator.geolocation.watchPosition(function(p){
+      fix={lat:p.coords.latitude, lon:p.coords.longitude};
+      $("hFix").innerHTML="FIX <b>"+fix.lat.toFixed(3)+", "+fix.lon.toFixed(3)+"</b>";
+    },function(){ $("hFix").innerHTML="FIX <b class='bad'>REFUSED</b>"; },
+    {enableHighAccuracy:true,maximumAge:30000});
+  }
+}
+function currentPointing(){
+  if(simMode) return simPointing;
+  if(!orientLive) return null;
+  var scr=(window.orientation!=null)?window.orientation:
+    ((screen.orientation&&screen.orientation.angle)||0);
+  return SH.pointingFromOrientation(orient.alpha,orient.beta,orient.gamma,scr);
+}
+var simPointing=null;
+
+/* tilt for the bubble: from orientation when live (gamma = left/right,
+   beta deviation from the overhead hold = forward/back), else sim tilt */
+function currentTilt(){
+  if(simMode) return simTilt;
+  if(orientLive&&orient.gamma!=null){
+    var tx=SH.clamp(Math.sin(SH.rad(orient.gamma))*1.6,-1,1);
+    var ty=SH.clamp(Math.sin(SH.rad((orient.beta||0)-90))*1.6,-1,1);
+    return {x:tx,y:ty};
+  }
+  return {x:0,y:0};
+}
+
+/* ---------- TONE FOCUS GENERATOR ----------
+   Binaural split: carrier LEFT, carrier+beat RIGHT. Slow amplitude wobble.
+   Lock-coupled: gain breathes with lock quality, pitch steadies at LOCK,
+   and the tone stops dead when the lock is released or the mode exits. */
+var tone={ctx:null,on:false,carrier:420,beat:4.0,vol:0.20,preset:420,
+  oscL:null,oscR:null,gain:null,lfo:null,lfoGain:null,merger:null};
+/* ---------- CARRIER PRESETS ----------
+   The digital-root numbers significant in the house's pathways, plus the
+   other traditionals — each with its explanation on the face, tradition
+   labelled as tradition, fact as fact. A preset is a starting seat: it
+   moves the carrier dial, and the dial stays free. Roots are COMPUTED
+   (digit-sum to one digit), never hand-typed, so the face cannot drift
+   from the arithmetic. */
+function digitalRoot(n){
+  n=Math.abs(Math.round(n));
+  while(n>=10){ var s=0; while(n>0){ s+=n%10; n=Math.floor(n/10); } n=s; }
+  return n;
+}
+var PRESETS=[
+  {hz:369, why:"The lattice itself. Tesla's 3-6-9, as the tradition tells it."},
+  {hz:396, why:"Solfeggio set. Also this house's design number."},
+  {hz:417, why:"Solfeggio set."},
+  {hz:420, why:"The owner's number."},
+  {hz:432, why:"The natural-tuning tradition's prime. Verdi's pitch."},
+  {hz:528, why:"Solfeggio set — the one that tradition calls the love frequency."},
+  {hz:639, why:"Solfeggio set."},
+  {hz:741, why:"Solfeggio set."},
+  {hz:852, why:"Solfeggio set."},
+  {hz:440, why:"Concert standard since the 1950s. The one number here off the 3-6-9 lattice — listed so the operator can hear the difference himself."}
+];
+/* The dial's provenance: the preset it currently sits on, or FREE DIAL.
+   Stepping onto a preset number seats it; stepping off frees it. */
+function syncPreset(){
+  tone.preset=null;
+  for(var i=0;i<PRESETS.length;i++) if(PRESETS[i].hz===tone.carrier) tone.preset=tone.carrier;
+  document.querySelectorAll(".preset").forEach(function(ch){
+    ch.classList.toggle("on", parseInt(ch.getAttribute("data-preset"),10)===tone.carrier);
+  });
+}
+function presetLogValue(){ return tone.preset==null?"FREE DIAL":tone.preset; }
+function toneBuild(){
+  var AC=window.AudioContext||window.webkitAudioContext; if(!AC) return false;
+  tone.ctx=new AC();
+  var c=tone.ctx;
+  tone.oscL=c.createOscillator(); tone.oscR=c.createOscillator();
+  tone.oscL.type="sine"; tone.oscR.type="sine";
+  tone.gain=c.createGain(); tone.gain.gain.value=0;
+  tone.lfo=c.createOscillator(); tone.lfo.frequency.value=0.13; /* slow wobble */
+  tone.lfoGain=c.createGain(); tone.lfoGain.gain.value=0.35;
+  var gL=c.createGain(), gR=c.createGain();
+  tone.merger=c.createChannelMerger(2);
+  tone.oscL.connect(gL); tone.oscR.connect(gR);
+  gL.connect(tone.merger,0,0); gR.connect(tone.merger,0,1);
+  tone.merger.connect(tone.gain); tone.gain.connect(c.destination);
+  tone.lfo.connect(tone.lfoGain); tone.lfoGain.connect(tone.gain.gain);
+  tone.oscL.start(); tone.oscR.start(); tone.lfo.start();
+  toneApplyFreq(0);
+  return true;
+}
+function toneApplyFreq(q){
+  if(!tone.ctx) return;
+  var steady = arrest.locked ? 1 : q;         /* pitch settles as the lock gains */
+  var f=tone.carrier*(1+(1-steady)*0.012);    /* ≤1.2% early wander, dead steady at lock */
+  var t=tone.ctx.currentTime;
+  tone.oscL.frequency.setTargetAtTime(f,t,0.1);
+  tone.oscR.frequency.setTargetAtTime(f+tone.beat,t,0.1);
+}
+function toneSetOn(on){
+  if(on && !tone.ctx){ if(!toneBuild()){ toast("NO AUDIO — TONE UNAVAILABLE"); return; } }
+  if(tone.ctx && tone.ctx.state==="suspended") tone.ctx.resume();
+  tone.on=on;
+  $("bTone").classList.toggle("on",on);
+  $("bToneToggle").textContent=on?"STOP TONE":"START TONE";
+  if(!on && tone.gain) tone.gain.gain.setTargetAtTime(0,tone.ctx.currentTime,0.05);
+}
+function toneFrame(q){
+  if(!tone.on||!tone.ctx) return;
+  var base=0;
+  /* v1.4: the dial's number IS the gain — full range, no house cap
+     (owner's ruling, Nov 26, 15:58 EST: he turned 369 up on the
+     handset speaker and could barely hear it hunt). The operator
+     owns the volume; the Tone sheet carries the earbuds caution. */
+  if(arrest.locked||guide) base=tone.vol;                 /* held lock: full voice */
+  else if(arrest.aboveSince!=null)                        /* a hold is building: gaining voice */
+    base=tone.vol*SH.clamp((q-0.6)/0.4,0.15,1);
+  /* otherwise silence: the tone stops when the lock is released */
+  var t=tone.ctx.currentTime;
+  tone.gain.gain.setTargetAtTime(base,t,0.12);
+  /* wobble depth rides the gain node via LFO gain scaling */
+  tone.lfoGain.gain.setTargetAtTime(base*0.7,t,0.2);
+  toneApplyFreq(q);
+}
+
+/* ---------- FREQUENCY WAVE (v1.3) ----------
+   The owner (Nov 26, 14:22 EST): "you should be seeing a frequency wave
+   across the bottom on your tone generator." The strip draws the tone
+   the generator is actually making — the left-ear carrier and the
+   right-ear carrier+beat summed, which is the true waveform of the
+   pair: a carrier whose envelope IS the beat. A 100 ms scope window
+   scrolls in real time, so the dial's numbers are visible as a period
+   and a swell: turn the carrier dial and the drawn period changes in
+   the same moment, one clock as everywhere else in this instrument.
+   When the tone is off, the strip says TONE OFF — it never draws a
+   flat fake wave. waveInfo counts the zero crossings of the very
+   points rasterised, so the bench grades the drawing, not a claim. */
+var waveCv=$("waveCv"), waveCtx=waveCv.getContext("2d");
+var waveInfo={state:"TONE OFF", crossings:0, carrier:420, beat:4.0};
+function drawWave(now){
+  var wpx=waveCv.width, hpx=waveCv.height;
+  if(!wpx) return;
+  waveCtx.fillStyle="rgba(6,12,26,0.92)"; waveCtx.fillRect(0,0,wpx,hpx);
+  waveCtx.strokeStyle="rgba(120,170,230,0.18)"; waveCtx.lineWidth=1;
+  waveCtx.beginPath(); waveCtx.moveTo(0,hpx/2+0.5); waveCtx.lineTo(wpx,hpx/2+0.5); waveCtx.stroke();
+  if(!tone.on){
+    waveInfo.state="TONE OFF"; waveInfo.crossings=0;
+    waveInfo.carrier=tone.carrier; waveInfo.beat=tone.beat;
+    waveCtx.fillStyle="#9fc6ee"; waveCtx.font="11px Courier New"; waveCtx.textAlign="center";
+    waveCtx.fillText("TONE OFF",wpx/2,hpx/2+4); waveCtx.textAlign="left";
+    return;
+  }
+  waveInfo.state="WAVE"; waveInfo.carrier=tone.carrier; waveInfo.beat=tone.beat;
+  var fc=tone.carrier, fb=tone.beat, T=0.1, t0=now/1000;
+  var mid=hpx/2, amp=hpx/2-4, prev=null, cross=0;
+  waveCtx.strokeStyle="#7dffb0"; waveCtx.lineWidth=1.6; waveCtx.beginPath();
+  for(var x=0;x<=wpx;x+=2){
+    var tau=t0+(x/wpx)*T;
+    var v=0.5*Math.sin(2*Math.PI*fc*tau)+0.5*Math.sin(2*Math.PI*(fc+fb)*tau);
+    var y=mid-v*amp;
+    if(x===0) waveCtx.moveTo(x,y); else waveCtx.lineTo(x,y);
+    if(prev!==null&&((prev<mid&&y>=mid)||(prev>mid&&y<=mid))) cross++;
+    prev=y;
+  }
+  waveCtx.stroke();
+  waveInfo.crossings=cross;
+  waveCtx.fillStyle="rgba(159,198,238,0.75)"; waveCtx.font="9px Courier New";
+  waveCtx.fillText(fc+" Hz + "+fb.toFixed(1),6,10);
+}
+
+/* ---------- bright-blob detection on a downscaled read of the stage ---------- */
+var scanCv=document.createElement("canvas"); scanCv.width=160; scanCv.height=120;
+var scanCtx=scanCv.getContext("2d",{willReadFrequently:true});
+function detectBlob(){
+  if(simMode&&simBlob) return simBlob;
+  scanCtx.drawImage(cv,0,0,160,120);
+  var img;
+  try{ img=scanCtx.getImageData(0,0,160,120).data; }catch(e){ return null; }
+  /* v1.3: the pick runs through SH.pickBlobFromScan — the compactness
+     gate. The old hunter took the single brightest pixel's neighbourhood,
+     which is how a broad floor reflection outbid the LED (owner's catch,
+     14:21). The core scorer prefers the small saturated hard-edged
+     source; this face code only builds the luminance field it reads. */
+  var lum=new Float32Array(160*120);
+  for(var i=0,p=0;i<img.length;i+=4,p++)
+    lum[p]=img[i]*0.45+img[i+1]*0.45+img[i+2]*0.1;
+  var b=SH.pickBlobFromScan(lum,160,120);
+  if(!b) return null;
+  return {x:b.cx/160*W, y:b.cy/120*H, peak:b.peak, mean:b.mean,
+          r:Math.max(5,b.rEq/160*W)};
+}
+
+/* ---------- OVERLAY COLOUR SCHEMES (v1.4) ----------
+   The owner's colour call (Nov 26, 16:00 EST): the chart indicators in
+   the field are light blue, and "you should be able to change that
+   coloration just like you can your coloration assembly in Stellarium
+   and your coloration assembly in our live wallpapers." His doctrine,
+   same breath: "specifically I like the red of the Stellarium… red's
+   non-injurious to your night vision… red is really the way to go at
+   night." And his addition minutes later: "it would be better scene
+   overlay in the daylight sky" — the overlay must read in DAYLIGHT
+   too, as an equal citizen: the DAY scheme is dark ink with a light
+   edge and bolder weight, benched against a bright synthetic sky at
+   a stated contrast threshold (labels ≥ 4.5:1, indicators ≥ 3:1).
+   The scheme recolours ONLY the rendered overlay layer — chart marks
+   and labels, the tri-star ring, the blob marker, the banner accents.
+   The camera image is never touched: what the lens saw stays what it
+   saw. The choice persists on the handset (localStorage) and rides
+   into the session export header. */
+var SCHEMES={
+  sky:{name:"SKY", sw:"#8cbeff",
+    dot:"rgba(140,190,255,0.55)", text:"rgba(140,190,255,0.50)",
+    ringBase:[140,210,255], ringLocked:[150,255,190], bead:"rgba(255,215,106,0.95)",
+    verts:["#ffd76a","#7dffb0","#6ec3ff"], glass:"rgba(120,170,230,0.20)",
+    marker:"rgba(255,215,106,0.65)",
+    bannerBg:"rgba(6,12,26,.9)", bannerInk:"#eafff2", bannerEdge:"#2b4a73", day:false},
+  nightred:{name:"NIGHT RED", sw:"#ff4632",
+    dot:"rgba(255,70,50,0.60)", text:"rgba(255,92,72,0.62)",
+    ringBase:[255,70,50], ringLocked:[255,110,90], bead:"#ff5040",
+    verts:["#ff3b30","#e8321e","#ff6b4a"], glass:"rgba(255,60,40,0.20)",
+    marker:"rgba(255,80,60,0.70)",
+    bannerBg:"rgba(22,5,3,.92)", bannerInk:"#ffd9d2", bannerEdge:"#7a2015", day:false},
+  ember:{name:"EMBER", sw:"#ffaa3c",
+    dot:"rgba(255,176,66,0.60)", text:"rgba(255,190,80,0.60)",
+    ringBase:[255,170,60], ringLocked:[255,205,120], bead:"#ffd76a",
+    verts:["#ffb03a","#ff8c2e","#ffd76a"], glass:"rgba(255,170,60,0.20)",
+    marker:"rgba(255,190,80,0.70)",
+    bannerBg:"rgba(22,14,3,.92)", bannerInk:"#ffe9c4", bannerEdge:"#7a5215", day:false},
+  spectral:{name:"SPECTRAL GREEN", sw:"#50ff96",
+    dot:"rgba(80,255,150,0.55)", text:"rgba(110,255,170,0.55)",
+    ringBase:[80,255,150], ringLocked:[165,255,205], bead:"#aaffcc",
+    verts:["#39ff88","#7dffb0","#2ee6a8"], glass:"rgba(80,255,150,0.20)",
+    marker:"rgba(110,255,170,0.70)",
+    bannerBg:"rgba(3,20,10,.92)", bannerInk:"#d9ffe6", bannerEdge:"#1d6b41", day:false},
+  day:{name:"DAY", sw:"#0b1c33",
+    dot:"#0b1c33", text:"#0a1526",
+    ringBase:[10,28,54], ringLocked:[6,102,46], bead:"#8a5a00",
+    verts:["#8a5a00","#0d7a3f","#0b5fa5"], glass:"rgba(10,21,38,0.35)",
+    marker:"rgba(138,90,0,0.85)",
+    bannerBg:"rgba(240,246,252,.94)", bannerInk:"#0a1526", bannerEdge:"#0b1c33", day:true}
+};
+var schemeName="sky";
+try{
+  var savedScheme=localStorage.getItem("starhunter.scheme.v1");
+  if(savedScheme&&SCHEMES[savedScheme]) schemeName=savedScheme;
+}catch(e){}
+function schemeNow(){ return SCHEMES[schemeName]; }
+function applyScheme(name){
+  if(!SCHEMES[name]) name="sky";
+  schemeName=name;
+  try{ localStorage.setItem("starhunter.scheme.v1",name); }catch(e){}
+  var s=SCHEMES[name], b=$("banner");
+  b.style.background=s.bannerBg; b.style.color=s.bannerInk;
+  b.style.borderTopColor=s.bannerEdge;
+  document.querySelectorAll(".schemeBtn").forEach(function(ch){
+    ch.classList.toggle("on", ch.getAttribute("data-scheme")===name);
+  });
+}
+/* the ring's stroke under a scheme: SKY keeps the exact v1–v1.3 formula
+   (the default is unchanged, byte for byte); the other schemes ride
+   their own base colour, lifting toward the locked colour as q gains */
+function ringStroke(q,locked,alpha){
+  if(schemeName==="sky")
+    return locked? "rgba(150,255,190,"+alpha+")" :
+      "rgba("+(110+Math.round(90*q))+","+(200+Math.round(40*q))+",255,"+alpha+")";
+  var s=schemeNow(), a=s.ringBase, b=s.ringLocked, c;
+  if(locked) c=b;
+  else{ var f=q*0.6; c=[0,1,2].map(function(i){ return Math.round(a[i]+(b[i]-a[i])*f); }); }
+  return "rgba("+c[0]+","+c[1]+","+c[2]+","+alpha+")";
+}
+/* one chart mark — dot + name — drawn the same way on the live field
+   and on the bench's swatch, so the bench grades the shipping stroke.
+   DAY draws bolder: a bigger dark dot with a light rim, and the name
+   in bold dark ink over a light halo, so it holds on a bright sky. */
+function drawChartStar(g,x,y,name){
+  var s=schemeNow();
+  if(s.day){
+    g.font="bold 11px 'Courier New',monospace";
+    g.beginPath(); g.arc(x,y,2.6,0,6.283); g.fillStyle=s.dot; g.fill();
+    g.lineWidth=1.4; g.strokeStyle="rgba(255,255,255,0.9)"; g.stroke();
+    g.lineWidth=3.5; g.strokeStyle="rgba(255,255,255,0.85)";
+    g.strokeText(name,x+7,y+3);
+    g.fillStyle=s.text; g.fillText(name,x+7,y+3);
+  } else {
+    g.font="10px 'Courier New',monospace";
+    g.fillStyle=s.dot;
+    g.beginPath(); g.arc(x,y,1.6,0,6.283); g.fill();
+    g.fillStyle=s.text; g.fillText(name,x+5,y+3);
+  }
+}
+/* the bench's daylight swatch: the shipping chart stroke over a bright
+   synthetic sky (blue-white gradient), sampled for WCAG contrast —
+   label ink = the darkest glyph pixels in the label box, dot ink = the
+   dot's centre pixel, each against the sky beside it. */
+function schemeSwatch(){
+  function lin(c){ c/=255; return c<=0.03928? c/12.92 : Math.pow((c+0.055)/1.055,2.4); }
+  function lum(p){ return 0.2126*lin(p[0])+0.7152*lin(p[1])+0.0722*lin(p[2]); }
+  function ratio(l1,l2){ var hi=Math.max(l1,l2), lo=Math.min(l1,l2); return (hi+0.05)/(lo+0.05); }
+  var cv2=document.createElement("canvas"); cv2.width=420; cv2.height=110;
+  var g=cv2.getContext("2d");
+  var grad=g.createLinearGradient(0,0,0,110);
+  grad.addColorStop(0,"#6f9fd0"); grad.addColorStop(0.55,"#a8cdf0"); grad.addColorStop(1,"#eef7ff");
+  g.fillStyle=grad; g.fillRect(0,0,420,110);
+  drawChartStar(g,60,55,"VEGA");
+  drawChartStar(g,220,55,"ALTAIR");
+  var img=g.getImageData(0,0,420,110).data;
+  function px(x,y){ var i=(y*420+x)*4; return [img[i],img[i+1],img[i+2]]; }
+  var inkL=1e9;
+  for(var y=44;y<66;y++) for(var x=64;x<140;x++){ var L=lum(px(x,y)); if(L<inkL) inkL=L; }
+  var labelC=ratio(lum(px(67,38)), inkL);
+  var dotC=ratio(lum(px(60,38)), lum(px(60,55)));
+  return {scheme:SCHEMES[schemeName].name,
+    labelContrast:Math.round(labelC*100)/100,
+    dotContrast:Math.round(dotC*100)/100};
+}
+
+/* ---------- render ---------- */
+function drawTriStar(cx,cy,R,ang,q,locked,tNow){
+  /* the tri-star ring: a triangle whose pulse travels corner to corner,
+     rendered — always sharp, whatever the camera's focus is doing.
+     The pulse runs on the shared beat clock: one full corner-to-corner
+     cycle per beat period, steps on the beat's subdivisions. */
+  var verts=[];
+  for(var i=0;i<3;i++){
+    var a=ang+i*2.0944;
+    verts.push([cx+Math.cos(a)*R, cy+Math.sin(a)*R]);
+  }
+  var pulsePos=(beatPhase%1)*3;
+  var sc=schemeNow();
+  ctx.lineWidth=2.2;
+  for(i=0;i<3;i++){
+    var A=verts[i], B=verts[(i+1)%3];
+    var segD=Math.abs(pulsePos-i); if(segD>1.5)segD=3-segD;
+    var glow=SH.clamp(1-segD,0,1);
+    var wob = locked?0:(1-q)*0.25*Math.sin(tNow/90+i*2.1);  /* falters while slipping */
+    var alpha=0.45+0.5*glow+wob;
+    if(sc.day){ /* DAY: a light underlay first, so the dark ink holds on a bright sky */
+      ctx.strokeStyle="rgba(255,255,255,0.85)"; ctx.lineWidth=5;
+      ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.stroke();
+      ctx.lineWidth=2.6;
+    }
+    ctx.strokeStyle=ringStroke(q,locked,alpha);
+    ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.stroke();
+    /* travelling pulse bead on this edge */
+    if(segD<1){
+      var f=pulsePos-Math.floor(pulsePos);
+      if(Math.floor(pulsePos)===i){
+        ctx.fillStyle=sc.bead;
+        ctx.beginPath();
+        ctx.arc(A[0]+(B[0]-A[0])*f, A[1]+(B[1]-A[1])*f, 3.4+2*glow, 0, 6.283); ctx.fill();
+      }
+    }
+  }
+  for(i=0;i<3;i++){
+    ctx.fillStyle=sc.verts[i];
+    ctx.beginPath(); ctx.arc(verts[i][0],verts[i][1],3.2,0,6.283); ctx.fill();
+    if(sc.day){ ctx.lineWidth=1.4; ctx.strokeStyle="rgba(255,255,255,0.9)"; ctx.stroke(); }
+  }
+  /* the bubble's glass: faint slim container */
+  ctx.strokeStyle=sc.glass; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,R*1.28,0,6.283); ctx.stroke();
+}
+/* PERF (v1.2): the camera frame is cover-fit ONCE per new video frame into
+   an offscreen canvas; the per-frame sky draw is then a flat blit of that
+   canvas. Scaling the live video element on every animation frame was the
+   expensive seat in the camera path. The overlay layer (ring, chart) keeps
+   its existing rendering — the owner graded it fluid. */
+var camCv=document.createElement("canvas"), camCtx=camCv.getContext("2d");
+var lastVidT=-1, camCvW=0, camCvH=0;
+function drawSky(tNow){
+  ctx.fillStyle="#04060e"; ctx.fillRect(0,0,W,H);
+  if(camOn&&video.readyState>=2){
+    if(video.currentTime!==lastVidT||camCvW!==W||camCvH!==H){
+      lastVidT=video.currentTime; camCvW=W; camCvH=H;
+      camCv.width=Math.max(2,Math.round(W*DPR)); camCv.height=Math.max(2,Math.round(H*DPR));
+      var vw=video.videoWidth, vh=video.videoHeight;
+      var dw=camCv.width, dh=camCv.height;
+      var sc=Math.max(dw/vw,dh/vh);
+      camCtx.drawImage(video,(dw-vw*sc)/2,(dh-vh*sc)/2,vw*sc,vh*sc);
+    }
+    ctx.drawImage(camCv,0,0,W,H);
+    ctx.fillStyle="rgba(2,4,12,0.18)"; ctx.fillRect(0,0,W,H);
+  } else {
+    for(var i=0;i<demoStars.length;i++){
+      var st=demoStars[i];
+      var a=0.35+0.3*Math.sin(tNow/900+st.tw);
+      ctx.fillStyle="rgba(200,225,255,"+a+")";
+      ctx.beginPath(); ctx.arc(st.fx*W,st.fy*H,st.r,0,6.283); ctx.fill();
+    }
+    var bx=demoBlobPos.fx*W, by=demoBlobPos.fy*H;
+    var g=ctx.createRadialGradient(bx,by,0,bx,by,26);
+    g.addColorStop(0,"rgba(255,255,255,0.98)"); g.addColorStop(0.25,"rgba(220,235,255,0.75)");
+    g.addColorStop(1,"rgba(160,190,255,0)");
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(bx,by,26,0,6.283); ctx.fill();
+    ctx.fillStyle="rgba(255,215,106,0.9)"; ctx.font="11px Courier New";
+    /* the label rides just above the bottom readout cluster, however
+       tall the cluster stands (banner / window / wave / bar) */
+    var bsEl=$("bottomStack"), bsH=bsEl?bsEl.offsetHeight:150;
+    ctx.fillText("DEMO SKY — NO CAMERA",12,H-bsH-12);
+  }
+  /* chart overlay — nominal FOV, labelled, verify by eye. The marks are
+     drawn by drawChartStar in the operator's overlay scheme (v1.4);
+     only this drawn layer recolours, never the camera image under it. */
+  var pt=currentPointing();
+  if(pt&&fix&&pt.alt>0){
+    for(var j=0;j<SH.CATALOG.length;j++){
+      var c=SH.CATALOG[j]; if(c[3]>2.2) continue;
+      var aa=SH.radecToAltAz(c[1],c[2],fix.lat,fix.lon,Date.now());
+      if(aa.alt<1) continue;
+      var pr=SH.projectToFrame(aa.alt,aa.az,pt.alt,pt.az,62,W,H);
+      if(!pr) continue;
+      drawChartStar(ctx,pr.x,pr.y,c[0]);
+    }
+  }
+}
+
+var lastT=performance.now(), physAcc=0, lastBlobAt=0;
+/* PERF (v1.2): HUD writes only when the words actually change — DOM text
+   was being rewritten every animation frame. */
+var hudCache={};
+function setHud(id,html){
+  if(hudCache[id]===html) return;
+  hudCache[id]=html; $(id).innerHTML=html;
+}
+function frame(now){
+  requestAnimationFrame(frame);
+  var dt=Math.min(0.05,(now-lastT)/1000); lastT=now;
+  /* bubble physics at a fixed 120 Hz step */
+  physAcc+=dt; var t=currentTilt();
+  var step=1/120;
+  while(physAcc>=step){ bubble.step(t.x,-t.y,step,W/2,H/2); physAcc-=step; }
+  var cx=W/2+bubble.x, cy=H/2+bubble.y;
+
+  /* PERF (v1.2): blob detection reads the whole stage back (drawImage +
+     getImageData) — at full frame rate that readback stalls the camera
+     path. ~15 Hz is far inside the 2 s hold's needs. */
+  if(now-lastBlobAt>=66){ blob=detectBlob(); lastBlobAt=now; }
+  var dist=blob?Math.hypot(blob.x-cx,blob.y-cy):9999;
+  peakHist.push(blob?blob.peak:0); if(peakHist.length>30)peakHist.shift();
+  var pVar=0; if(peakHist.length>4){
+    var m=peakHist.reduce(function(a,b){return a+b;})/peakHist.length;
+    pVar=peakHist.reduce(function(a,b){return a+(b-m)*(b-m);},0)/peakHist.length;
+  }
+  var q=SH.lockQuality(dist,pVar,bubble.speed(),!!blob);
+  var ev=arrest.update(q,now);
+  if(ev==="LOCK") onLock(cx,cy,dist);
+  if(arrest.locked&&q<0.4){
+    /* lock slipped away */
+    if(guide) endGuide("LOCK LOST");
+    arrest.release(); unlockFocus(); toneFrame(0);
+    setRead("LOCK LOST","The bubble slipped off the light. Settle it again — slow hands.");
+  }
+  if(guide) guide.sample(now,dist,q,currentPointing());
+  /* the shared clock: beat phase advances at the dialed beat rate;
+     spin rides a slow multiple of the same clock — one turn per 12 beats */
+  beatPhase+=dt*tone.beat;
+  spin+=dt*6.2832*tone.beat/12;
+
+  drawSky(now);
+  var R0=Math.min(W,H)*0.17;
+  var R=blob&&dist<R0*1.2 ? R0-(R0-(blob.r+20))*SH.clamp(q+0.25,0,1) : R0;
+  drawTriStar(cx,cy,R,spin,q,arrest.locked,now);
+  if(blob){
+    ctx.strokeStyle=schemeNow().marker; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(blob.x,blob.y,blob.r+7,0,6.283); ctx.stroke();
+  }
+  /* HUD — written only when a value changes (see setHud). The readout
+     lives in the bottom observation window now (v1.3); the minimal
+     strip mirrors the three lines that stay up when it is collapsed. */
+  var lockWord=arrest.locked?"HELD":(q>=0.45?"GAINING":"—");
+  setHud("hLock","LOCK <b>"+lockWord+"</b>");
+  setHud("mLock","LOCK <b>"+lockWord+"</b>");
+  var pt2=currentPointing();
+  var ptWord=pt2?("ALT "+pt2.alt.toFixed(0)+"° AZ "+pt2.az.toFixed(0)+"°"):"NO MEASURE";
+  setHud("hPoint","POINTING <b>"+ptWord+"</b>");
+  setHud("mPoint","POINTING <b>"+ptWord+"</b>");
+  if(guide){
+    var st=guide.stats(now);
+    setHud("hHold","HOLD <b>"+st.holdS.toFixed(1)+"s</b>");
+    setHud("mHold","HOLD <b>"+st.holdS.toFixed(1)+"s</b>");
+    setHud("hDrift","DRIFT <b>"+st.driftPx+"px · "+st.driftDeg+"°</b>");
+    var sz=SH.stasisRead(st);
+    setHud("hStasis","STASIS <b>"+(sz.steady?"LOCK STEADY":"—")+"</b>");
+  } else setHud("mHold","HOLD <b>0.0s</b>");
+  drawWave(now);
+  /* TARGET steering rides in the HUD block — never a plate over the field */
+  if(targetStar){
+    $("hSteer").style.display="";
+    var steerTxt="—";
+    if(fix&&pt2){
+      var aa2=SH.radecToAltAz(targetStar.ra,targetStar.dec,fix.lat,fix.lon,Date.now());
+      steerTxt=targetStar.name.toUpperCase()+" — "+
+        (aa2.alt<0?"BELOW YOUR HORIZON":SH.steerText(aa2,pt2));
+    } else if(fix){ steerTxt=targetStar.name.toUpperCase()+" — NO POINTING YET"; }
+    else steerTxt=targetStar.name.toUpperCase()+" — NO FIX";
+    setHud("hSteer","STEER <b>"+steerTxt+"</b>");
+  } else $("hSteer").style.display="none";
+  toneFrame(q);
+}
+
+/* ---------- the arrest ---------- */
+function onLock(cx,cy,dist){
+  lockFlash=Date.now();
+  lockFocus();   /* FOCUS LAW: the servo stops hunting for the whole hold */
+  var pt=currentPointing();
+  var R=Math.min(W,H)*0.17;
+  var rect=SH.cropRect(Math.round(W),Math.round(H),Math.round(cx),Math.round(cy),Math.round(R));
+  var crop=$("crop").getContext("2d");
+  crop.fillStyle="#000"; crop.fillRect(0,0,264,264);
+  crop.drawImage(cv,rect.sx*DPR,rect.sy*DPR,rect.sw*DPR,rect.sh*DPR,0,0,264,264);
+  $("arrestBox").style.display="block";
+  placePortal();   /* the portal reopens where the operator dropped it */
+  /* motion across holds: pointing change since the previous arrest */
+  var motion=null;
+  if(pt&&lastArrests.length){
+    var prev=lastArrests[lastArrests.length-1];
+    if(prev.pointing) motion=SH.altAzSepDeg(prev.pointing.alt,prev.pointing.az,pt.alt,pt.az);
+  }
+  var id=SH.identify({pointing:pt, lat:fix?fix.lat:null, lon:fix?fix.lon:null,
+    ms:Date.now(), peak:blob?blob.peak:0, motionDeg:motion});
+  var thumb=null;
+  try{ thumb=$("crop").toDataURL("image/jpeg",0.6); }catch(e){}
+  var entry={t:new Date().toISOString(), kind:"ARREST",
+    read:id.line, conf:id.conf||"—",
+    peak:blob?blob.peak:0,
+    fx:blob?Math.round(blob.x/W*100):null, fy:blob?Math.round(blob.y/H*100):null,
+    alt:pt?Math.round(pt.alt*10)/10:null, az:pt?Math.round(pt.az*10)/10:null,
+    focus:focusPlan, beatHz:tone.beat, carrierHz:tone.carrier, preset:presetLogValue(),
+    target:targetStar?targetStar.name:null, thumb:thumb};
+  log.append(entry); persistLog();
+  lastArrests.push({pointing:pt, ms:Date.now()});
+  /* banner carries the SHORT line only — brightness, frame position and the
+     full identification detail are in the log entry written just above */
+  setRead("LOCK — "+id.line);
+  if(guideArmed&&!guide){
+    guide=new SH.GuideSession(performance.now()); /* one clock: the frame clock */
+    $("hMode").innerHTML="MODE <b>GUIDE-IN</b>";
+    setRead("GUIDE-IN — HOLD THE LOCK","Intent forward. Open to receive.");
+  }
+  if(tone.on) toneApplyFreq(1);
+}
+
+/* ---------- guide-in ---------- */
+function endGuide(reason){
+  if(!guide) return;
+  var st=guide.stats(performance.now());
+  log.append({t:new Date().toISOString(), kind:"GUIDE", reason:reason,
+    holdS:st.holdS, driftPx:st.driftPx, driftDeg:st.driftDeg, meanQ:st.meanQ,
+    carrierHz:tone.carrier, preset:presetLogValue(), beatHz:tone.beat, vol:Math.round(tone.vol*100)+"%",
+    focus:focusState, sync:"ONE CLOCK — dialed beat drives tone, ring pulse, ring spin",
+    stasis:SH.stasisRead(st).label+" ("+SH.stasisRead(st).basis+")",
+    bio:SH.BIO_LANE});
+  persistLog(); guide=null;
+  $("hMode").innerHTML="MODE <b>"+(targetStar?"TARGET":"FREE HUNT")+"</b>";
+  setRead("HOLD ENDED — "+reason,"It is in the log, chained.");
+}
+
+/* ---------- the bottom banner (v1.2 field fix) ----------
+   The owner's first hands-on grade (Nov 26, 14:03 EST): the big readout
+   plate "is in the way" over the camera field. His amendment (14:04):
+   lock messages become a slim div across the BOTTOM of the screen; the
+   text TYPES OUT so the eye is drawn to it; output is TRUNCATED — short
+   lines only, the long text lives in the LOG. Types fast enough to
+   finish in about a second, holds, then clears itself. No tap to clear,
+   and nothing in this system ever covers the centre of the field. */
+var MSG_CAP=90;
+var bannerTimer=null, bannerHideTimer=null, bannerFull="";
+function truncateMsg(t){
+  if(t.length<=MSG_CAP) return t;
+  var cut=t.slice(0,MSG_CAP-1), sp=cut.lastIndexOf(" ");
+  if(sp>40) cut=cut.slice(0,sp);
+  return cut+"…";
+}
+function hideBanner(){ $("banner").style.display="none"; }
+function showBanner(text){
+  var el=$("banner");
+  bannerFull=truncateMsg(text);
+  el.style.display="block"; el.textContent="";
+  clearInterval(bannerTimer); clearTimeout(bannerHideTimer);
+  var i=0, stepMs=Math.max(10,Math.round(1000/Math.max(1,bannerFull.length)));
+  bannerTimer=setInterval(function(){
+    i++;
+    el.textContent=bannerFull.slice(0,i);
+    if(i>=bannerFull.length){
+      clearInterval(bannerTimer);
+      bannerHideTimer=setTimeout(hideBanner,2800);
+    }
+  },stepMs);
+}
+function toast(msg){ showBanner(msg); }
+function setRead(main,sub){ showBanner(sub!=null?(main+" — "+sub):main); }
+
+/* ---------- the arrested portal: drag it, drop it, it stays (v1.2) ----------
+   The owner's interaction law (Nov 26, 14:05 EST): where the field of
+   interest sits depends on the handset's plane — horizon work puts it at
+   the TOP of the screen, so the portal moves DOWN; overhead work puts the
+   star toward the BOTTOM, so the portal moves UP. And when an event
+   happens "it's panic for everybody": the move is a DIRECT drag on the
+   portal itself — no mode, no menu, no pin ceremony. Release IS the lock.
+   The portal rides above the field layer and takes its own touches, so a
+   drag is never read as a field gesture. Position persists for the
+   session (sessionStorage) and reopens where it was dropped. */
+var portal={x:null,y:null};
+try{
+  var savedPortal=sessionStorage.getItem("starhunter.portal.v1");
+  if(savedPortal){ var pp=JSON.parse(savedPortal); if(pp&&pp.x!=null) portal=pp; }
+}catch(e){}
+function placePortal(){
+  if(portal.x==null) return;
+  var b=$("arrestBox");
+  b.style.left=portal.x+"px"; b.style.top=portal.y+"px"; b.style.right="auto";
+}
+(function(){
+  var ab=$("arrestBox"), drag=null;
+  ab.addEventListener("pointerdown",function(ev){
+    var r=ab.getBoundingClientRect();
+    drag={dx:ev.clientX-r.left, dy:ev.clientY-r.top};
+    try{ ab.setPointerCapture(ev.pointerId); }catch(e){}
+    ev.preventDefault(); ev.stopPropagation();
+  });
+  ab.addEventListener("pointermove",function(ev){
+    if(!drag) return;
+    var nx=SH.clamp(ev.clientX-drag.dx,0,Math.max(0,window.innerWidth-ab.offsetWidth));
+    var ny=SH.clamp(ev.clientY-drag.dy,0,Math.max(0,window.innerHeight-ab.offsetHeight));
+    ab.style.left=nx+"px"; ab.style.top=ny+"px"; ab.style.right="auto";
+    portal.x=Math.round(nx); portal.y=Math.round(ny);
+    ev.preventDefault();
+  });
+  function dropPortal(){
+    if(!drag) return;
+    drag=null;   /* release IS the lock — it stays where dropped */
+    try{ sessionStorage.setItem("starhunter.portal.v1",JSON.stringify(portal)); }catch(e){}
+  }
+  ab.addEventListener("pointerup",dropPortal);
+  ab.addEventListener("pointercancel",dropPortal);
+})();
+
+/* ---------- the observation window: drag it, X it away (v1.3) ----------
+   The owner's layout call (Nov 26, 14:22 EST): "that readout that's at
+   the top of the window should really be at the bottom and all of those
+   bubble divs should be much smaller on the bottom and that observation
+   window should be movable just like the arrest and there should be an
+   X to exit away so you just see the screen with the lock readout
+   information and a frequency."
+   So: the window lives in the bottom cluster, tight and small. Its drag
+   law is the portal's — direct drag, release IS the lock, its own
+   touches, position persists for the session (sessionStorage). The X
+   collapses it to the minimal strip: LOCK · HOLD · POINTING and the
+   frequency wave stay on screen; the READOUT button on the strip
+   brings the window back where it was.
+   v1.4: the drag is hardened (grip strip header, pointer capture,
+   tap-by-travel) after the owner's v1.3 field fault — see the handler. */
+var obs={x:null,y:null,w:null,collapsed:false};
+try{
+  var savedObs=sessionStorage.getItem("starhunter.obswin.v1");
+  if(savedObs){ var so=JSON.parse(savedObs);
+    if(so){ obs.x=so.x; obs.y=so.y; obs.w=so.w; obs.collapsed=!!so.collapsed; } }
+}catch(e){}
+function saveObs(){ try{ sessionStorage.setItem("starhunter.obswin.v1",JSON.stringify(obs)); }catch(e){} }
+function placeObs(){
+  if(obs.x==null) return;
+  var el=$("obsWin");
+  el.classList.add("fixed");
+  el.style.left=obs.x+"px"; el.style.top=obs.y+"px";
+  if(obs.w) el.style.width=obs.w+"px";
+}
+function applyObsCollapse(){
+  $("obsWin").style.display=obs.collapsed?"none":"flex";
+  $("miniRead").style.display=obs.collapsed?"flex":"none";
+}
+(function(){
+  var el=$("obsWin"), drag=null;
+  /* v1.4 HARDENING — the owner's field fault on v1.3 (Nov 26, 15:57 EST):
+     "I couldn't get that data feed window to move." The drag is rebuilt
+     to be unmissable under real fingers:
+     - the window's header is a dedicated GRIP STRIP (#obsGrip) spanning
+       the full width — a gloves-sized grab surface — and the whole
+       window body still drags too;
+     - pointer capture is taken on the window, so a wandering finger
+       that slides off the panel mid-drag does not lose it;
+     - tap ≠ drag is decided by TRAVEL: under 6 px of movement a press
+       is a tap (a tap on the × collapses); past it, the press is a
+       drag — and a drag that happens to END on the × moves the window,
+       it does not collapse it. */
+  var TAP_TRAVEL=6;
+  el.addEventListener("pointerdown",function(ev){
+    var r=el.getBoundingClientRect();
+    if(obs.x==null){ /* first drag: lift it out of the bottom cluster */
+      el.classList.add("fixed");
+      el.style.width=r.width+"px";
+      el.style.left=r.left+"px"; el.style.top=r.top+"px";
+      obs.x=Math.round(r.left); obs.y=Math.round(r.top); obs.w=Math.round(r.width);
+    }
+    drag={sx:ev.clientX, sy:ev.clientY, dx:ev.clientX-r.left, dy:ev.clientY-r.top,
+      moved:false,
+      onX:!!(ev.target&&(ev.target.id==="obsX"||
+        (ev.target.closest&&ev.target.closest("#obsX"))))};
+    try{ el.setPointerCapture(ev.pointerId); }catch(e){}
+    ev.preventDefault(); ev.stopPropagation();
+  });
+  el.addEventListener("pointermove",function(ev){
+    if(!drag) return;
+    if(!drag.moved&&Math.hypot(ev.clientX-drag.sx,ev.clientY-drag.sy)<TAP_TRAVEL) return;
+    drag.moved=true;
+    var nx=SH.clamp(ev.clientX-drag.dx,0,Math.max(0,window.innerWidth-el.offsetWidth));
+    var ny=SH.clamp(ev.clientY-drag.dy,0,Math.max(0,window.innerHeight-el.offsetHeight));
+    el.style.left=nx+"px"; el.style.top=ny+"px";
+    obs.x=Math.round(nx); obs.y=Math.round(ny);
+    ev.preventDefault();
+  });
+  function dropObs(){
+    if(!drag) return;
+    var wasDrag=drag.moved, onX=drag.onX;
+    drag=null;
+    if(wasDrag){ saveObs(); /* release IS the lock */ }
+    else if(onX){ obs.collapsed=true; saveObs(); applyObsCollapse(); /* a tap on the X */ }
+  }
+  el.addEventListener("pointerup",dropObs);
+  el.addEventListener("pointercancel",function(){ drag=null; });
+  $("bObsOpen").addEventListener("click",function(){
+    obs.collapsed=false; saveObs(); applyObsCollapse(); placeObs();
+  });
+  applyObsCollapse(); placeObs();
+})();
+
+/* ---------- chart sheet ---------- */
+function buildChart(){
+  var list=$("chartList"); list.innerHTML="";
+  var now=Date.now();
+  SH.CATALOG.forEach(function(c){
+    var row=document.createElement("div"); row.className="row";
+    var state="NO MEASURE";
+    if(fix){
+      var aa=SH.radecToAltAz(c[1],c[2],fix.lat,fix.lon,now);
+      state=aa.alt<0?"DOWN":("UP · ALT "+aa.alt.toFixed(0)+"°");
+    }
+    row.innerHTML="<span>"+c[0]+" <span class='small'>mag "+c[3]+"</span></span>"+
+      "<span class='small'>"+state+"</span>";
+    var b=document.createElement("button"); b.textContent="TARGET";
+    b.addEventListener("click",function(){
+      targetStar={name:c[0],ra:c[1],dec:c[2],mag:c[3]};
+      $("hMode").innerHTML="MODE <b>TARGET</b>";
+      $("chartSheet").classList.remove("open");
+      setRead("TARGET — "+c[0].toUpperCase(),
+        fix?"Steering is in the HUD. Settle the bubble on it.":
+        "No fix yet — SENSORS first.");
+    });
+    row.appendChild(b); list.appendChild(row);
+  });
+}
+
+/* ---------- log sheet ---------- */
+function buildLog(){
+  var v=SH.LogChain.verify(log.entries);
+  $("logState").textContent="Chain: "+(v.ok?("OK — "+v.at+" entries, unbroken"):"BROKEN at entry "+v.at)+
+    " · chain is tamper-evident (FNV-1a), not a signature.";
+  var list=$("logList"); list.innerHTML="";
+  log.entries.slice().reverse().forEach(function(e){
+    var d=document.createElement("div"); d.className="logline";
+    var txt=e.t+" · "+e.kind+" · "+(e.read||e.reason||"")+
+      (e.kind==="GUIDE"?(" · hold "+e.holdS+"s · drift "+e.driftPx+"px/"+e.driftDeg+"° · tone "+e.carrierHz+"Hz +"+e.beatHz):"")+
+      " · #"+e.h;
+    if(e.thumb){ var im=document.createElement("img"); im.src=e.thumb; d.appendChild(im); }
+    d.appendChild(document.createTextNode(txt));
+    list.appendChild(d);
+  });
+  if(!log.entries.length) list.innerHTML="<div class='logline'>No arrests yet. The log fills from real holds only.</div>";
+}
+
+/* ---------- wiring ---------- */
+$("bCam").addEventListener("click",function(){ camOn?stopCamera():startCamera(); });
+$("bSensors").addEventListener("click",startSensors);
+$("bChart").addEventListener("click",function(){ buildChart(); $("chartSheet").classList.add("open"); });
+$("bChartClose").addEventListener("click",function(){ $("chartSheet").classList.remove("open"); });
+/* overlay scheme buttons: built from the SCHEMES table (v1.4). The
+   saved choice is applied at build time so the banner wears it from
+   the first frame; the chart marks and ring read it every frame. */
+(function(){
+  var row=$("schemeRow");
+  Object.keys(SCHEMES).forEach(function(k){
+    var s=SCHEMES[k], b=document.createElement("button");
+    b.className="schemeBtn"; b.setAttribute("data-scheme",k);
+    b.innerHTML="<span class='sw' style='background:"+s.sw+"'></span>"+s.name;
+    b.addEventListener("click",function(){ applyScheme(k); });
+    row.appendChild(b);
+  });
+  applyScheme(schemeName);
+})();
+/* preset chips: built from the PRESETS table, roots computed at build time */
+(function(){
+  var row=$("presetRow");
+  PRESETS.forEach(function(p){
+    var b=document.createElement("button");
+    b.className="preset"; b.setAttribute("data-preset",p.hz);
+    b.innerHTML="<span class='phz'>"+p.hz+" Hz</span><span class='prt'>ROOT "+digitalRoot(p.hz)+"</span>"+
+      "<span class='pwhy'>"+p.why+"</span>";
+    b.addEventListener("click",function(){
+      tone.carrier=SH.clamp(p.hz,40,900);
+      $("vCarrier").textContent=tone.carrier;
+      syncPreset();
+      if(tone.on) toneApplyFreq(arrest.locked?1:0.5);
+    });
+    row.appendChild(b);
+  });
+  syncPreset();
+})();
+$("bTone").addEventListener("click",function(){ $("toneSheet").classList.add("open"); });
+$("bToneClose").addEventListener("click",function(){ $("toneSheet").classList.remove("open"); });
+$("bToneToggle").addEventListener("click",function(){ toneSetOn(!tone.on); });
+$("bGuide").addEventListener("click",function(){
+  if(guide){ endGuide("ENDED BY OPERATOR"); guideArmed=false; if(tone.on)toneSetOn(false); return; }
+  $("postureSheet").classList.add("open");
+});
+$("bPostureGo").addEventListener("click",function(){
+  $("postureSheet").classList.remove("open");
+  guideArmed=true;
+  $("hMode").innerHTML="MODE <b>GUIDE-IN ARMED</b>";
+  setRead("GUIDE-IN ARMED","Take the lock — the hold begins at the arrest.");
+});
+$("bPostureClose").addEventListener("click",function(){ $("postureSheet").classList.remove("open"); });
+$("bLog").addEventListener("click",function(){ buildLog(); $("logSheet").classList.add("open"); });
+$("bLogClose").addEventListener("click",function(){ $("logSheet").classList.remove("open"); });
+/* Pipe-ready session export: ONE clean record per session — timestamped
+   lock events, holds, drift, tone settings, star target, focus state.
+   This file is the seam to the Watchdog pipe: Star Hunter is a field node,
+   and this export is shaped so a session feed can aggregate without
+   re-parsing prose. v1 builds NO networking; the export is the seam. */
+function exportText(){
+  return JSON.stringify({
+    format:"STAR-HUNTER-SESSION-EXPORT", version:1,
+    instrument:"STAR HUNTER v1.4 — Apex Air Solutions",
+    overlayScheme:SCHEMES[schemeName].name,
+    exportedAt:new Date().toISOString(),
+    bioLane:"RESERVED — NO MEASURE (no headset on hand)",
+    entries:log.entries
+  },null,1);
+}
+$("bExport").addEventListener("click",function(){
+  var blob2=new Blob([exportText()],{type:"application/json"});
+  var a=document.createElement("a"); a.href=URL.createObjectURL(blob2);
+  a.download="star-hunter-session.json"; a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);},4000);
+});
+document.querySelectorAll("[data-step]").forEach(function(b){
+  b.addEventListener("click",function(){
+    var p=b.getAttribute("data-step").split(","), k=p[0], d=parseFloat(p[1]);
+    if(k==="carrier"){ tone.carrier=SH.clamp(Math.round(tone.carrier+d),40,900); $("vCarrier").textContent=tone.carrier; syncPreset(); }
+    if(k==="beat"){ tone.beat=SH.clamp(Math.round((tone.beat+d)*10)/10,0,40); $("vBeat").textContent=tone.beat.toFixed(1); }
+    if(k==="vol"){ tone.vol=SH.clamp(Math.round((tone.vol+d)*100)/100,0,1); $("vVol").textContent=Math.round(tone.vol*100)+"%"; }
+    if(tone.on) toneApplyFreq(arrest.locked?1:0.5);
+  });
+});
+
+/* ---------- test hooks (bench + desktop sim) ---------- */
+window.__SH__={SH:SH, bubble:bubble, arrest:arrest,
+  setSim:function(on){ simMode=!!on; },
+  setSimTilt:function(x,y){ simTilt={x:x,y:y}; },
+  setSimBlob:function(b){ simBlob=b; },
+  setSimPointing:function(p){ simPointing=p; },
+  setFix:function(lat,lon){ fix={lat:lat,lon:lon}; },
+  getLog:function(){ return log; },
+  exportText:exportText,
+  getState:function(){ return {locked:arrest.locked, guide:!!guide, q:arrest.aboveSince!=null}; },
+  banner:{ show:showBanner, full:function(){ return bannerFull; },
+    typed:function(){ return $("banner").textContent; },
+    visible:function(){ return $("banner").style.display==="block"; } },
+  portalPos:function(){ var b=$("arrestBox"); return {x:portal.x, y:portal.y,
+    left:b.offsetLeft, top:b.offsetTop}; },
+  wave:waveInfo,
+  demoBlobPos:function(){ return {fx:demoBlobPos.fx, fy:demoBlobPos.fy}; },
+  obsPos:function(){ var el=$("obsWin"); var r=el.getBoundingClientRect();
+    return {x:obs.x, y:obs.y, left:r.left, top:r.top, collapsed:obs.collapsed,
+      winDisplay:el.style.display, miniDisplay:$("miniRead").style.display}; },
+  scheme:{ get:function(){ return schemeName; },
+    name:function(){ return SCHEMES[schemeName].name; },
+    set:function(n){ applyScheme(n); },
+    list:function(){ return Object.keys(SCHEMES); },
+    swatch:schemeSwatch },
+  tone:tone, presets:PRESETS, digitalRoot:digitalRoot };
+
+showBanner("Raise the handset — rear camera to the sky.");
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
