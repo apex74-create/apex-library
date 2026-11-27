@@ -9,31 +9,44 @@
     font-family:"Courier New", ui-monospace, monospace; -webkit-user-select:none; user-select:none;
     touch-action:none; }
   #game { position:fixed; inset:0; display:block; background:#000; }
-  .plate { position:fixed; bottom:14px; z-index:10; color:#57ff8a; border:2px solid #57ff8a;
-    background:rgba(0,20,8,.55); border-radius:10px; padding:12px 10px; text-align:center;
+  /* BOUNDS FIX (Holly's card, Nov 27): the four plates were fixed-positioned
+     at 104px + padding with 12px overlaps built in, and on a portrait phone
+     the left and right pairs collided outright — rotate sat under its
+     neighbours. The plates now ride one flex deck: equal shares of the
+     width, no overlap at any width, lifted off the nav bar by the
+     safe-area inset. */
+  #deck { position:fixed; left:0; right:0; bottom:0; z-index:10; display:flex;
+    gap:8px; padding:10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+    box-sizing:border-box; pointer-events:none; }
+  .plate { flex:1 1 0; min-width:0; pointer-events:auto; color:#57ff8a; border:2px solid #57ff8a;
+    background:rgba(0,20,8,.55); border-radius:10px; padding:12px 6px; text-align:center;
     font-size:13px; font-weight:bold; letter-spacing:.08em; line-height:1.35; cursor:pointer;
     display:none; touch-action:none; }
   .plate small { display:block; font-size:10px; font-weight:normal; color:#cfe8d8; letter-spacing:.12em; }
   .plate.on { background:#57ff8a; color:#001505; }
   .plate.on small { color:#003312; }
-  #btnL { left:12px; width:104px; }
-  #btnR { left:128px; width:104px; }
-  #btnF { right:128px; width:104px; border-color:#ffcf5a; color:#ffcf5a; }
+  #btnF { border-color:#ffcf5a; color:#ffcf5a; }
   #btnF small { color:#e8dfc8; }
   #btnF.on { background:#ffcf5a; color:#1a1000; }
   #btnF.on small { color:#332400; }
-  #btnT { right:12px; width:104px; border-color:#ffb14e; color:#ffb14e; }
+  #btnT { border-color:#ffb14e; color:#ffb14e; }
   #btnT small { color:#e8dcc8; }
   #btnT.on { background:#ffb14e; color:#1a0e00; }
   #btnT.on small { color:#332000; }
+  @media (max-width:520px) {
+    .plate { font-size:11px; padding:10px 2px; letter-spacing:.03em; }
+    .plate small { font-size:8.5px; letter-spacing:.05em; }
+  }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+<div id="deck">
 <div class="plate" id="btnL">◀ ROTATE<small>HOLD TO TURN</small></div>
 <div class="plate" id="btnR">ROTATE ▶<small>HOLD TO TURN</small></div>
 <div class="plate" id="btnF">FIRE<small>HOLD TO KEEP FIRING</small></div>
 <div class="plate" id="btnT">THRUST<small>TAP = PULSE · HOLD = BURN</small></div>
+</div>
 <script>
 "use strict";
 /* =====================================================================
@@ -440,6 +453,14 @@ function drawTri(t) {
 }
 function text(str, x, y, size, col, align) {
   cx2d.font = 'bold ' + size + 'px "Courier New", monospace';
+  /* BOUNDS FIX (Holly's card, Nov 27): centered lines shrink to fit the
+     width — the 44px spaced title ran ~449px wide and clipped off a
+     phone screen. Nothing centered may paint past the glass anymore. */
+  if ((align || 'left') === 'center') {
+    const wT = cx2d.measureText(str).width, maxW = W - 24;
+    if (wT > maxW) cx2d.font = 'bold ' + Math.max(9, Math.floor(size * maxW / wT)) +
+      'px "Courier New", monospace';
+  }
   cx2d.textAlign = align || 'left'; cx2d.fillStyle = col || GREEN; cx2d.fillText(str, x, y);
 }
 function draw() {
@@ -501,8 +522,8 @@ function drawBoard() {
   const rows = [['RUNS FLOWN', st.runs], ['BEST SCORE', st.best], ['LAST SCORE', st.last],
     ['ROCKS BROKEN', st.rocks], ['SATELLITE DOCKS', st.docks],
     ['SAUCERS DOWN', st.saucers], ['TRIANGLES DOWN', st.triangles]];
-  rows.forEach((r, i) => { text(r[0], W / 2 - 170, H * 0.36 + i * 30, 16, WHITE);
-    text(String(r[1]), W / 2 + 170, H * 0.36 + i * 30, 16, GOLD, 'right'); });
+  rows.forEach((r, i) => { text(r[0], Math.max(14, W / 2 - 170), H * 0.36 + i * 30, 16, WHITE);
+    text(String(r[1]), Math.min(W - 14, W / 2 + 170), H * 0.36 + i * 30, 16, GOLD, 'right'); });
   text('S OR ENTER TO RETURN', W / 2, H * 0.36 + rows.length * 30 + 26, 13, DIM, 'center');
 }
 
