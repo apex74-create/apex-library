@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Apex Asteroids — Deluxe</title>
+<style>
+  html, body { margin:0; padding:0; background:#000; height:100%; overflow:hidden;
+    font-family:"Courier New", ui-monospace, monospace; -webkit-user-select:none; user-select:none;
+    touch-action:none; }
+  #game { position:fixed; inset:0; display:block; background:#000; }
+  .plate { position:fixed; bottom:14px; z-index:10; color:#57ff8a; border:2px solid #57ff8a;
+    background:rgba(0,20,8,.55); border-radius:10px; padding:12px 10px; text-align:center;
+    font-size:13px; font-weight:bold; letter-spacing:.08em; line-height:1.35; cursor:pointer;
+    display:none; touch-action:none; }
+  .plate small { display:block; font-size:10px; font-weight:normal; color:#cfe8d8; letter-spacing:.12em; }
+  .plate.on { background:#57ff8a; color:#001505; }
+  .plate.on small { color:#003312; }
+  #btnL { left:12px; width:104px; }
+  #btnR { left:128px; width:104px; }
+  #btnF { right:128px; width:104px; border-color:#ffcf5a; color:#ffcf5a; }
+  #btnF small { color:#e8dfc8; }
+  #btnF.on { background:#ffcf5a; color:#1a1000; }
+  #btnF.on small { color:#332400; }
+  #btnT { right:12px; width:104px; border-color:#ffb14e; color:#ffb14e; }
+  #btnT small { color:#e8dcc8; }
+  #btnT.on { background:#ffb14e; color:#1a0e00; }
+  #btnT.on small { color:#332000; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div class="plate" id="btnL">◀ ROTATE<small>HOLD TO TURN</small></div>
+<div class="plate" id="btnR">ROTATE ▶<small>HOLD TO TURN</small></div>
+<div class="plate" id="btnF">FIRE<small>HOLD TO KEEP FIRING</small></div>
+<div class="plate" id="btnT">THRUST<small>TAP = PULSE · HOLD = BURN</small></div>
+<script>
+"use strict";
+/* =====================================================================
+   APEX ASTEROIDS — DELUXE (house original, Asteroids-genre)
+   One self-contained offline file. Vanilla JS + canvas, zero deps.
+   '79 vector wireframe with the layered-glass effect: a rotating black
+   hole drawn as spiral ring plates over each other, behind the play.
+   Real physics feel: fixed-step 120 Hz integration, thrust along the
+   ship axis only, torque rotation with damping, momentum conserved
+   (no drag in vacuum — a drifting ship drifts until you kill it).
+   The deluxe piece is the REFIT: pull up on the ASSIST SATELLITE slow
+   and matched, dock, and it racks you in extra guns and motors for a
+   higher-speed run. Enemies: classic saucers and triangle hunters.
+   ===================================================================== */
+
+const cv = document.getElementById('game');
+const cx2d = cv.getContext('2d');
+let W = 0, H = 0;
+function fit() { W = cv.width = window.innerWidth; H = cv.height = window.innerHeight; }
+window.addEventListener('resize', fit); fit();
+
+/* ---------- seeded rng (mulberry32) — same sky every bench ---------- */
+function RNG(seed) { let a = seed >>> 0; return function () {
+  a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- constants — the physics of record ---------- */
+const STEP = 1 / 120;                 // fixed timestep, seconds
+const SHIP_R = 11;
+const ROT_ACCEL = 17.0;               // rad/s^2 while a rotate key is held
+const ROT_DAMP = 4.2;                 // angular damping /s
+const THRUST_1 = 215;                 // px/s^2, motor as launched
+const THRUST_2 = 350;                 // px/s^2, motor II off the satellite
+const BULLET_SPEED = 545;             // px/s, plus the ship's own velocity
+const BULLET_LIFE = 0.85;             // s
+const FIRE_RATE_1 = 6.5;              // shots/s, single gun
+const FIRE_RATE_2 = 9.0;              // shots/s, twin guns off the satellite
+const DOCK_RANGE = 46;                // px, ship centre to satellite centre
+const DOCK_MAX_REL = 48;              // px/s — come in faster and you crash
+const REFIT_TIME = 2.2;               // s racked in on the satellite
+const SAUCER_SCORE = 200, TRI_SCORE = 150;
+const ROCK_SCORE = { 3: 20, 2: 50, 1: 100 };   // large / medium / small
+
+const GREEN = '#57ff8a', WHITE = '#eafff0', DIM = '#2a7a48',
+      AMBER = '#ffb14e', GOLD = '#ffcf5a', VIOLET = '#9a6bff',
+      RED = '#ff5a5a', CYAN = '#6be8ff';
+
+/* ---------- input ---------- */
+const keys = {};
+const touch = { left: false, right: false, fire: false, thrust: false };
+window.addEventListener('keydown', e => {
+  if (['ArrowLeft','ArrowRight','ArrowUp',' '].includes(e.key)) e.preventDefault();
+  keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = true;
+  if (G.state === 'title' && (e.key === 'Enter')) startRun();
+  else if (G.state === 'over' && (e.key === 'Enter' || e.key.toLowerCase() === 'r')) startRun();
+  else if (e.key.toLowerCase() === 's' && G.state !== 'play') G.state = (G.state === 'board') ? 'title' : 'board';
+  else if (e.key.toLowerCase() === 'p' && G.state === 'play') G.paused = !G.paused;
+});
+window.addEventListener('keyup', e => { keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = false; });
+cv.addEventListener('pointerdown', () => {
+  if (G.state === 'title') startRun();
+  else if (G.state === 'over' && G.overAt && performance.now() - G.overAt > 600) startRun();
+});
+function bindPlate(id, prop) {
+  const el = document.getElementById(id);
+  const on = e => { e.preventDefault(); el.setPointerCapture && e.pointerId !== undefined && el.setPointerCapture(e.pointerId); touch[prop] = true; el.classList.add('on'); };
+  const off = e => { touch[prop] = false; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', on);
+  el.addEventListener('pointerup', off);
+  el.addEventListener('pointercancel', off);
+  el.addEventListener('lostpointercapture', off);
+}
+bindPlate('btnL', 'left'); bindPlate('btnR', 'right');
+bindPlate('btnF', 'fire'); bindPlate('btnT', 'thrust');
+function showPlates(v) { for (const id of ['btnL','btnR','btnF','btnT'])
+  document.getElementById(id).style.display = v ? 'block' : 'none'; }
+const IN = {
+  left:  () => keys['ArrowLeft']  || keys['a'] || touch.left,
+  right: () => keys['ArrowRight'] || keys['d'] || touch.right,
+  thrust:() => keys['ArrowUp']    || keys['w'] || touch.thrust,
+  fire:  () => keys[' '] || keys['z'] || touch.fire
+};
+
+/* ---------- world state ---------- */
+const G = {
+  state: 'title', paused: false, time: 0, score: 0, wave: 0, lives: 3,
+  ship: null, rocks: [], bullets: [], ebullets: [], parts: [],
+  saucer: null, tris: [], sat: null, satTimer: 0, saucerTimer: 0, triTimer: 0,
+  fireCd: 0, invuln: 0, docked: 0, dockArm: true, shake: 0, banner: '', bannerT: 0,
+  overAt: 0, runRocks: 0, runDocks: 0,
+  stats: loadStats()
+};
+function loadStats() {
+  try { const s = JSON.parse(localStorage.getItem('apexAsteroidsStatsV1') || 'null');
+    if (s && typeof s.runs === 'number') return s; } catch (e) {}
+  return { runs: 0, best: 0, rocks: 0, docks: 0, saucers: 0, triangles: 0, last: 0 };
+}
+function saveStats() { try { localStorage.setItem('apexAsteroidsStatsV1', JSON.stringify(G.stats)); } catch (e) {} }
+
+function wrap(p) { if (p.x < 0) p.x += W; if (p.x >= W) p.x -= W; if (p.y < 0) p.y += H; if (p.y >= H) p.y -= H; }
+function dist2(a, b) { // shortest distance on the torus
+  let dx = Math.abs(a.x - b.x); if (dx > W / 2) dx = W - dx;
+  let dy = Math.abs(a.y - b.y); if (dy > H / 2) dy = H - dy;
+  return dx * dx + dy * dy;
+}
+function relVel(a, b) { const dx = a.vx - b.vx, dy = a.vy - b.vy; return Math.hypot(dx, dy); }
+
+function newShip() {
+  return { x: W / 2, y: H / 2, vx: 0, vy: 0, a: -Math.PI / 2, av: 0, r: SHIP_R,
+           guns: 1, motor: 1, shield: 0, barrel: 0, alive: true };
+}
+function rockShape(rng, r) {
+  const n = 9 + Math.floor(rng() * 5), pts = [];
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, k = 0.74 + rng() * 0.42;
+    pts.push([Math.cos(a) * r * k, Math.sin(a) * r * k]); }
+  return pts;
+}
+function spawnRock(x, y, tier, rng) {
+  const r = tier === 3 ? 46 : tier === 2 ? 26 : 14;
+  const sp = tier === 3 ? 26 + rng() * 30 : tier === 2 ? 38 + rng() * 36 : 55 + rng() * 45;
+  const a = rng() * Math.PI * 2;
+  const rock = { x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, a: rng() * Math.PI * 2,
+                 av: (rng() - 0.5) * 0.9, r, tier, pts: rockShape(rng, r) };
+  G.rocks.push(rock); return rock;
+}
+function startWave(n) {
+  G.wave = n; G.rocks.length = 0;
+  const rng = RNG(1979 + n * 131);
+  const count = 3 + n;
+  for (let i = 0; i < count; i++) {
+    let x, y, tries = 0;
+    do { x = rng() * W; y = rng() * H; tries++; }
+    while (G.ship && dist2({ x, y }, G.ship) < 240 * 240 && tries < 40);
+    spawnRock(x, y, 3, rng);
+  }
+  G.satTimer = 16; G.saucerTimer = 9 + rng() * 6; G.triTimer = 12 + rng() * 6;
+  G.banner = 'WAVE ' + n; G.bannerT = 2.0;
+}
+function startRun() {
+  G.score = 0; G.lives = 3; G.ship = newShip(); G.invuln = 2.0;
+  G.bullets.length = 0; G.ebullets.length = 0; G.parts.length = 0;
+  G.saucer = null; G.tris.length = 0; G.sat = null; G.docked = 0; G.dockArm = true;
+  G.runRocks = 0; G.runDocks = 0; G.paused = false; G.overAt = 0;
+  G.state = 'play'; showPlates(true);
+  startWave(1);
+}
+function explode(x, y, col, n, spd) {
+  const rng = Math.random;
+  for (let i = 0; i < n; i++) { const a = rng() * Math.PI * 2, s = 30 + rng() * spd;
+    G.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.5 + rng() * 0.7, col }); }
+  G.shake = Math.min(9, G.shake + 4);
+}
+function breakRock(rock) {
+  G.score += ROCK_SCORE[rock.tier]; G.runRocks++; G.stats.rocks++;
+  explode(rock.x, rock.y, GREEN, rock.tier === 3 ? 10 : 6, 130);
+  if (rock.tier > 1) { const rng = RNG((Math.random() * 1e9) | 0);
+    for (let i = 0; i < 2; i++) { const c = spawnRock(rock.x, rock.y, rock.tier - 1, rng);
+      c.vx += rock.vx * 0.4; c.vy += rock.vy * 0.4; } }
+  G.rocks.splice(G.rocks.indexOf(rock), 1);
+}
+
+/* ---------- the assist satellite ---------- */
+function spawnSatellite() {
+  const rng = Math.random, side = Math.floor(rng() * 4);
+  const sat = { x: 0, y: 0, vx: 0, vy: 0, r: 17, a: 0, blink: 0 };
+  if (side === 0) { sat.x = 30; sat.y = rng() * H; sat.vx = 20; sat.vy = 7; }
+  if (side === 1) { sat.x = W - 30; sat.y = rng() * H; sat.vx = -20; sat.vy = -7; }
+  if (side === 2) { sat.x = rng() * W; sat.y = 30; sat.vx = 7; sat.vy = 20; }
+  if (side === 3) { sat.x = rng() * W; sat.y = H - 30; sat.vx = -7; sat.vy = -20; }
+  G.sat = sat;
+}
+function finishRefit() {
+  const s = G.ship;
+  if (s.guns === 1) { s.guns = 2; s.motor = 2; G.banner = 'REFIT COMPLETE — TWIN GUNS · MOTOR II'; }
+  else { G.banner = 'SATELLITE SERVICE — SHIELD CHARGED'; }
+  s.shield = 1; G.score += 250; G.runDocks++; G.stats.docks++;
+  G.bannerT = 2.4; G.invuln = 1.2;
+  /* Undock with a real push off the satellite, and the dock stays
+     disarmed until the ship has genuinely cleared the satellite —
+     otherwise the ship re-docks on its own push and farms the refit. */
+  const svx = G.sat ? G.sat.vx : 0, svy = G.sat ? G.sat.vy : 0;
+  s.vx = svx; s.vy = svy - 78;
+  G.docked = 0;        // the dock is OVER — a negative timer left here once
+                       // read as "docked" to the collision guards and made
+                       // the ship untouchable for the rest of the run
+  G.dockArm = false;
+}
+
+/* ---------- enemies ---------- */
+function spawnSaucer() {
+  const fromLeft = Math.random() < 0.5;
+  G.saucer = { x: fromLeft ? -30 : W + 30, y: 80 + Math.random() * (H - 160),
+    vx: (fromLeft ? 1 : -1) * (55 + Math.random() * 30), vy: 0, r: 16,
+    fireT: 1.4, weave: Math.random() * 9, score: SAUCER_SCORE };
+}
+function spawnTriangle() {
+  const a = Math.random() * Math.PI * 2;
+  const tri = { x: G.ship.x + Math.cos(a) * Math.max(W, H) * 0.55,
+                y: G.ship.y + Math.sin(a) * Math.max(W, H) * 0.55,
+                vx: 0, vy: 0, a: 0, r: 12, score: TRI_SCORE };
+  wrap(tri); G.tris.push(tri);
+}
+/* ---------- simulation ---------- */
+function killShip(cause) {
+  const s = G.ship;
+  explode(s.x, s.y, WHITE, 22, 190);
+  G.lives--; s.alive = false; G.docked = 0;
+  G.banner = cause; G.bannerT = 1.8;
+  if (G.lives < 0) {
+    G.state = 'over'; G.overAt = performance.now();
+    G.stats.runs++; G.stats.last = G.score;
+    if (G.score > G.stats.best) G.stats.best = G.score;
+    saveStats(); showPlates(false);
+  } else {
+    respawnShip();   // the refit survives death — guns and motors stay racked
+  }
+}
+function respawnShip() {
+  const keep = { guns: G.ship.guns, motor: G.ship.motor };
+  G.ship = newShip(); G.ship.guns = keep.guns; G.ship.motor = keep.motor;
+  G.ship.x = W / 2; G.ship.y = H / 2; G.invuln = 2.5;
+}
+function step(dt) {
+  G.time += dt;
+  if (G.bannerT > 0) G.bannerT -= dt;
+  if (G.invuln > 0) G.invuln -= dt;
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 16);
+  const s = G.ship;
+  if (G.docked > 0 && !G.sat) G.docked = 0;   // satellite lost mid-refit: the dock simply ends
+
+  /* --- satellite schedule --- */
+  if (!G.sat && !G.docked) { G.satTimer -= dt; if (G.satTimer <= 0) spawnSatellite(); }
+  if (G.sat) { const t = G.sat; t.x += t.vx * dt; t.y += t.vy * dt; t.a += dt * 0.7; t.blink += dt; wrap(t); }
+  /* --- enemy schedules --- */
+  if (G.wave >= 2 && !G.saucer) { G.saucerTimer -= dt; if (G.saucerTimer <= 0) { spawnSaucer(); G.saucerTimer = 16 + Math.random() * 8; } }
+  if (G.tris.length < 2) { G.triTimer -= dt; if (G.triTimer <= 0) { spawnTriangle(); G.triTimer = 13 + Math.random() * 8; } }
+
+  /* --- ship --- */
+  if (s && s.alive) {
+    if (G.docked > 0) {
+      G.docked -= dt;
+      s.x = G.sat.x; s.y = G.sat.y - (G.sat.r + 14);
+      s.vx = G.sat.vx; s.vy = G.sat.vy; s.av = 0;
+      if (G.docked <= 0) finishRefit();
+    } else {
+      if (IN.left())  s.av -= ROT_ACCEL * dt;
+      if (IN.right()) s.av += ROT_ACCEL * dt;
+      s.av -= s.av * ROT_DAMP * dt;
+      s.a += s.av * dt;
+      if (IN.thrust()) { const T = s.motor === 2 ? THRUST_2 : THRUST_1;
+        s.vx += Math.cos(s.a) * T * dt; s.vy += Math.sin(s.a) * T * dt; s.flame = 1; }
+      else s.flame = 0;
+      s.x += s.vx * dt; s.y += s.vy * dt; wrap(s);
+      /* firing */
+      G.fireCd -= dt;
+      if (IN.fire() && G.fireCd <= 0) {
+        G.fireCd = 1 / (s.guns === 2 ? FIRE_RATE_2 : FIRE_RATE_1);
+        const nose = { x: s.x + Math.cos(s.a) * 14, y: s.y + Math.sin(s.a) * 14 };
+        if (s.guns === 2) {
+          s.barrel = 1 - s.barrel;
+          const px = Math.cos(s.a + Math.PI / 2) * (s.barrel ? 5 : -5),
+                py = Math.sin(s.a + Math.PI / 2) * (s.barrel ? 5 : -5);
+          G.bullets.push({ x: nose.x + px, y: nose.y + py,
+            vx: s.vx + Math.cos(s.a) * BULLET_SPEED, vy: s.vy + Math.sin(s.a) * BULLET_SPEED, life: BULLET_LIFE });
+        } else {
+          G.bullets.push({ x: nose.x, y: nose.y,
+            vx: s.vx + Math.cos(s.a) * BULLET_SPEED, vy: s.vy + Math.sin(s.a) * BULLET_SPEED, life: BULLET_LIFE });
+        }
+      }
+      /* docking / satellite crash */
+      if (G.sat) {
+        const d2 = dist2(s, G.sat);
+        if (!G.dockArm && d2 > (DOCK_RANGE + 44) * (DOCK_RANGE + 44)) G.dockArm = true;
+        if (G.dockArm && d2 < DOCK_RANGE * DOCK_RANGE) {
+          if (relVel(s, G.sat) <= DOCK_MAX_REL) { G.docked = REFIT_TIME; G.banner = 'DOCKED — REFIT IN PROGRESS'; G.bannerT = REFIT_TIME; }
+          else if (G.invuln <= 0) { explode(G.sat.x, G.sat.y, AMBER, 14, 150); G.sat = null; G.satTimer = 25; hitShip('TOO HOT ON THE SATELLITE'); }
+        }
+      }
+    }
+  }
+
+  /* --- rocks --- */
+  for (const r of G.rocks) { r.x += r.vx * dt; r.y += r.vy * dt; r.a += r.av * dt; wrap(r); }
+  /* --- bullets --- */
+  for (let i = G.bullets.length - 1; i >= 0; i--) { const b = G.bullets[i];
+    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; wrap(b);
+    if (b.life <= 0) { G.bullets.splice(i, 1); continue; }
+    let eaten = false;
+    for (const r of [...G.rocks]) if (dist2(b, r) < r.r * r.r) { breakRock(r); eaten = true; break; }
+    if (!eaten && G.saucer && dist2(b, G.saucer) < G.saucer.r * G.saucer.r) {
+      G.score += G.saucer.score; G.stats.saucers++; explode(G.saucer.x, G.saucer.y, CYAN, 16, 170);
+      G.saucer = null; eaten = true; }
+    if (!eaten) for (const t of [...G.tris]) if (dist2(b, t) < t.r * t.r) {
+      G.score += t.score; G.stats.triangles++; explode(t.x, t.y, RED, 12, 160);
+      G.tris.splice(G.tris.indexOf(t), 1); eaten = true; break; }
+    if (!eaten && G.sat && dist2(b, G.sat) < G.sat.r * G.sat.r) {
+      explode(G.sat.x, G.sat.y, AMBER, 14, 150); G.sat = null; G.satTimer = 25;
+      G.banner = 'YOU SHOT THE SATELLITE'; G.bannerT = 2.0; eaten = true; }
+    if (eaten) G.bullets.splice(i, 1);
+  }
+  /* --- saucer --- */
+  if (G.saucer) { const u = G.saucer;
+    u.weave += dt * 2.2; u.x += u.vx * dt; u.y += Math.sin(u.weave) * 34 * dt;
+    if (u.x < -60 || u.x > W + 60) G.saucer = null;
+    else if (s && s.alive) { u.fireT -= dt;
+      if (u.fireT <= 0) { u.fireT = 1.6;
+        const dx = s.x - u.x, dy = s.y - u.y, m = Math.hypot(dx, dy) || 1;
+        G.ebullets.push({ x: u.x, y: u.y, vx: dx / m * 320, vy: dy / m * 320, life: 2.4 }); } }
+  }
+  /* --- triangles hunt --- */
+  for (const t of G.tris) {
+    if (s && s.alive) { const dx = s.x - t.x, dy = s.y - t.y, m = Math.hypot(dx, dy) || 1;
+      t.vx += dx / m * 62 * dt; t.vy += dy / m * 62 * dt;
+      const sp = Math.hypot(t.vx, t.vy); if (sp > 135) { t.vx *= 135 / sp; t.vy *= 135 / sp; }
+      t.a = Math.atan2(t.vy, t.vx); }
+    t.x += t.vx * dt; t.y += t.vy * dt; wrap(t);
+  }
+  /* --- enemy bullets --- */
+  for (let i = G.ebullets.length - 1; i >= 0; i--) { const b = G.ebullets[i];
+    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; wrap(b);
+    if (b.life <= 0) { G.ebullets.splice(i, 1); continue; }
+    if (s && s.alive && !G.docked && G.invuln <= 0 && dist2(b, s) < (s.r + 3) * (s.r + 3)) {
+      G.ebullets.splice(i, 1); hitShip('SHOT DOWN'); }
+  }
+  /* --- satellite vs rocks: honest collision --- */
+  if (G.sat) for (const r of [...G.rocks]) if (dist2(G.sat, r) < (G.sat.r + r.r * 0.8) * (G.sat.r + r.r * 0.8)) {
+    explode(G.sat.x, G.sat.y, AMBER, 14, 150); breakRock(r); G.sat = null; G.satTimer = 25;
+    G.banner = 'SATELLITE LOST'; G.bannerT = 2.0; break; }
+  /* --- ship vs the world --- */
+  if (s && s.alive && !G.docked && G.invuln <= 0) {
+    for (const r of G.rocks) if (dist2(s, r) < (s.r + r.r * 0.82) * (s.r + r.r * 0.82)) { hitShip('ROCK'); break; }
+    if (s.alive && G.saucer && dist2(s, G.saucer) < (s.r + G.saucer.r) * (s.r + G.saucer.r)) hitShip('SAUCER RAM');
+    if (s.alive) for (const t of G.tris) if (dist2(s, t) < (s.r + t.r) * (s.r + t.r)) { hitShip('TRIANGLE RAM'); break; }
+  }
+  /* --- particles --- */
+  for (let i = G.parts.length - 1; i >= 0; i--) { const p = G.parts[i];
+    p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; if (p.life <= 0) G.parts.splice(i, 1); }
+  /* --- wave clear --- */
+  if (G.state === 'play' && G.rocks.length === 0 && s && s.alive) startWave(G.wave + 1);
+}
+function hitShip(cause) {
+  const s = G.ship;
+  if (s.shield > 0) { s.shield = 0; G.invuln = 1.5;
+    explode(s.x, s.y, GOLD, 10, 140); G.banner = 'SHIELD SPENT — ' + cause; G.bannerT = 1.6; return; }
+  killShip(cause);
+}
+
+/* ---------- drawing ---------- */
+const starRng = RNG(1979); const STARS = [];
+for (let i = 0; i < 130; i++) STARS.push({ x: starRng(), y: starRng(), r: starRng() < 0.12 ? 2 : 1, tw: starRng() * 9 });
+function path(pts, close) { cx2d.beginPath(); pts.forEach((p, i) => i ? cx2d.lineTo(p[0], p[1]) : cx2d.moveTo(p[0], p[1])); if (close) cx2d.closePath(); }
+function stroke2(col, dim, w) { cx2d.strokeStyle = dim; cx2d.lineWidth = w * 3.4; cx2d.globalAlpha = 0.35; cx2d.stroke();
+  cx2d.strokeStyle = col; cx2d.lineWidth = w; cx2d.globalAlpha = 1; cx2d.stroke(); }
+function drawBlackHole(t) {
+  const bx = W * 0.78, by = H * 0.24;
+  for (let plateI = 0; plateI < 3; plateI++) {
+    cx2d.save(); cx2d.translate(bx, by); cx2d.rotate(t * (0.05 + plateI * 0.035) * (plateI % 2 ? -1 : 1));
+    cx2d.globalAlpha = 0.16 + plateI * 0.05;
+    cx2d.strokeStyle = plateI === 1 ? VIOLET : DIM; cx2d.lineWidth = 1.2;
+    cx2d.beginPath();
+    for (let a = 0; a < Math.PI * 6.4; a += 0.12) { const r = 8 + a * 7.2;
+      const x = Math.cos(a) * r, y = Math.sin(a) * r * 0.42; a === 0 ? cx2d.moveTo(x, y) : cx2d.lineTo(x, y); }
+    cx2d.stroke(); cx2d.restore();
+  }
+  cx2d.save(); cx2d.translate(bx, by);
+  cx2d.globalAlpha = 0.9; cx2d.fillStyle = '#000'; cx2d.beginPath(); cx2d.arc(0, 0, 15, 0, 7); cx2d.fill();
+  cx2d.strokeStyle = VIOLET; cx2d.lineWidth = 1.6; cx2d.beginPath(); cx2d.arc(0, 0, 15, 0, 7); cx2d.stroke();
+  cx2d.restore(); cx2d.globalAlpha = 1;
+}
+function drawShip(s) {
+  if (!s.alive) return;
+  if (G.invuln > 0 && G.docked <= 0 && Math.floor(G.time * 9) % 2 === 0) return; // blink while invulnerable
+  cx2d.save(); cx2d.translate(s.x, s.y); cx2d.rotate(s.a);
+  if (s.flame) { const f = 12 + Math.random() * 9;
+    path([[-8, 4.5], [-8 - f, 0], [-8, -4.5]]); stroke2(AMBER, '#7a4a12', 1.6); }
+  path([[15, 0], [-9, 8.5], [-5, 0], [-9, -8.5], [15, 0]], true);
+  stroke2(s.motor === 2 ? GOLD : GREEN, DIM, 1.8);
+  if (s.guns === 2) { path([[8, 5.5], [15, 5.5]]); path([[8, -5.5], [15, -5.5]]); stroke2(GOLD, DIM, 1.4); }
+  cx2d.restore();
+  if (s.shield > 0) { cx2d.save(); cx2d.translate(s.x, s.y);
+    cx2d.strokeStyle = GOLD; cx2d.globalAlpha = 0.55; cx2d.lineWidth = 1.2;
+    cx2d.beginPath(); cx2d.arc(0, 0, 20, 0, 7); cx2d.stroke(); cx2d.restore(); cx2d.globalAlpha = 1; }
+}
+function drawSat(t) {
+  cx2d.save(); cx2d.translate(t.x, t.y);
+  path([[-11, -7], [11, -7], [11, 7], [-11, 7], [-11, -7]], true); stroke2(AMBER, '#7a4a12', 1.6);
+  cx2d.rotate(t.a);
+  path([[-30, -3.5], [-12, -3.5], [-12, 3.5], [-30, 3.5], [-30, -3.5]], true);
+  path([[12, -3.5], [30, -3.5], [30, 3.5], [12, 3.5], [12, -3.5]], true); stroke2(AMBER, '#7a4a12', 1.3);
+  cx2d.restore();
+  if (Math.floor(t.blink * 2.4) % 2 === 0) { cx2d.fillStyle = AMBER;
+    cx2d.beginPath(); cx2d.arc(t.x, t.y - 13, 2.4, 0, 7); cx2d.fill(); }
+}
+function drawSaucer(u) {
+  cx2d.save(); cx2d.translate(u.x, u.y);
+  path([[-7, -8], [7, -8], [11, -2], [-11, -2], [-7, -8]], true); stroke2(CYAN, '#2a5a7a', 1.4);
+  path([[-16, 3], [16, 3], [10, 8], [-10, 8], [-16, 3]], true); stroke2(CYAN, '#2a5a7a', 1.4);
+  cx2d.restore();
+}
+function drawTri(t) {
+  cx2d.save(); cx2d.translate(t.x, t.y); cx2d.rotate(t.a);
+  path([[13, 0], [-9, 8], [-9, -8], [13, 0]], true); stroke2(RED, '#7a2222', 1.5);
+  cx2d.restore();
+}
+function text(str, x, y, size, col, align) {
+  cx2d.font = 'bold ' + size + 'px "Courier New", monospace';
+  cx2d.textAlign = align || 'left'; cx2d.fillStyle = col || GREEN; cx2d.fillText(str, x, y);
+}
+function draw() {
+  cx2d.fillStyle = '#000'; cx2d.fillRect(0, 0, W, H);
+  cx2d.save();
+  if (G.shake > 0) cx2d.translate((Math.random() - 0.5) * G.shake, (Math.random() - 0.5) * G.shake);
+  for (const st of STARS) { cx2d.globalAlpha = 0.45 + 0.3 * Math.sin(G.time * 1.7 + st.tw);
+    cx2d.fillStyle = WHITE; cx2d.fillRect(st.x * W, st.y * H, st.r, st.r); }
+  cx2d.globalAlpha = 1;
+  drawBlackHole(G.time);
+  if (G.state === 'title') {
+    text('A S T E R O I D S', W / 2, H * 0.30, 44, GREEN, 'center');
+    text('D E L U X E', W / 2, H * 0.30 + 38, 20, GOLD, 'center');
+    text('DOCK ON THE ASSIST SATELLITE — IT RACKS YOU IN', W / 2, H * 0.46, 15, WHITE, 'center');
+    text('EXTRA GUNS · EXTRA MOTORS · A FASTER RUN', W / 2, H * 0.46 + 24, 15, WHITE, 'center');
+    text('← → TURN · ↑ THRUST · SPACE FIRE · S BOARD', W / 2, H * 0.56, 14, DIM, 'center');
+    text('PRESS ENTER OR TAP TO FLY', W / 2, H * 0.66, 17, GREEN, 'center');
+    if (G.stats.best > 0) text('BEST ' + G.stats.best, W / 2, H * 0.72, 14, GOLD, 'center');
+  } else if (G.state === 'board') {
+    drawBoard();
+  } else {
+    for (const r of G.rocks) { cx2d.save(); cx2d.translate(r.x, r.y); cx2d.rotate(r.a);
+      path(r.pts, true); stroke2(GREEN, DIM, 1.6); cx2d.restore(); }
+    if (G.sat) drawSat(G.sat);
+    if (G.saucer) drawSaucer(G.saucer);
+    for (const t of G.tris) drawTri(t);
+    cx2d.fillStyle = WHITE;
+    for (const b of G.bullets) cx2d.fillRect(b.x - 1.6, b.y - 1.6, 3.2, 3.2);
+    cx2d.fillStyle = RED;
+    for (const b of G.ebullets) cx2d.fillRect(b.x - 1.8, b.y - 1.8, 3.6, 3.6);
+    for (const p of G.parts) { cx2d.globalAlpha = Math.max(0, p.life); cx2d.strokeStyle = p.col;
+      cx2d.beginPath(); cx2d.moveTo(p.x, p.y); cx2d.lineTo(p.x - p.vx * 0.03, p.y - p.vy * 0.03); cx2d.stroke(); }
+    cx2d.globalAlpha = 1;
+    if (G.ship) drawShip(G.ship);
+    /* HUD */
+    text('SCORE ' + G.score, 16, 30, 17, GREEN);
+    text('WAVE ' + G.wave, 16, 54, 14, DIM);
+    for (let i = 0; i < Math.max(0, G.lives); i++) {
+      cx2d.save(); cx2d.translate(W - 30 - i * 26, 30); cx2d.rotate(-Math.PI / 2);
+      path([[11, 0], [-7, 6.5], [-4, 0], [-7, -6.5], [11, 0]], true); stroke2(GREEN, DIM, 1.3); cx2d.restore(); }
+    const s = G.ship;
+    if (s) text((s.guns === 2 ? 'TWIN GUNS' : 'SINGLE GUN') + ' · ' + (s.motor === 2 ? 'MOTOR II' : 'MOTOR I') +
+                (s.shield ? ' · SHIELD' : ''), W - 16, 58, 13, GOLD, 'right');
+    if (G.sat && !G.docked) text('ASSIST SAT UP — DOCK UNDER ' + DOCK_MAX_REL + ' PX/S', W / 2, 30, 13, AMBER, 'center');
+    if (G.docked > 0) text('REFIT… ' + G.docked.toFixed(1), W / 2, 30, 15, AMBER, 'center');
+    if (G.bannerT > 0 && G.banner) text(G.banner, W / 2, H * 0.3, 20, WHITE, 'center');
+    if (G.paused) text('PAUSED', W / 2, H * 0.5, 26, GOLD, 'center');
+    if (G.state === 'over') {
+      text('GAME OVER', W / 2, H * 0.4, 34, RED, 'center');
+      text('SCORE ' + G.score + ' · BEST ' + G.stats.best, W / 2, H * 0.4 + 40, 17, WHITE, 'center');
+      text('ENTER OR TAP TO FLY AGAIN · S FOR THE BOARD', W / 2, H * 0.4 + 72, 14, DIM, 'center');
+    }
+  }
+  cx2d.restore();
+}
+function drawBoard() {
+  const st = G.stats;
+  text('STATISTICS — REAL PLAY ONLY', W / 2, H * 0.26, 22, GREEN, 'center');
+  const rows = [['RUNS FLOWN', st.runs], ['BEST SCORE', st.best], ['LAST SCORE', st.last],
+    ['ROCKS BROKEN', st.rocks], ['SATELLITE DOCKS', st.docks],
+    ['SAUCERS DOWN', st.saucers], ['TRIANGLES DOWN', st.triangles]];
+  rows.forEach((r, i) => { text(r[0], W / 2 - 170, H * 0.36 + i * 30, 16, WHITE);
+    text(String(r[1]), W / 2 + 170, H * 0.36 + i * 30, 16, GOLD, 'right'); });
+  text('S OR ENTER TO RETURN', W / 2, H * 0.36 + rows.length * 30 + 26, 13, DIM, 'center');
+}
+
+/* ---------- main loop: fixed-step physics, render decoupled ---------- */
+let last = performance.now(), acc = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  let dt = (now - last) / 1000; last = now;
+  if (dt > 0.25) dt = 0.25;
+  if (G.state === 'play' && !G.paused) { acc += dt; while (acc >= STEP) { step(STEP); acc -= STEP; } }
+  else G.time += dt;
+  draw();
+}
+requestAnimationFrame(frame);
+
+/* ---------- bench hooks (the bench plays with real inputs and reads
+   this state; hooks only place bodies, they never fake an outcome) --- */
+window.__AST__ = { G, startRun, spawnRock, spawnSaucer, spawnTriangle, spawnSatellite,
+  RNG, C: { THRUST_1, THRUST_2, BULLET_SPEED, DOCK_MAX_REL, DOCK_RANGE } };
+</script>
+</body>
+</html>
