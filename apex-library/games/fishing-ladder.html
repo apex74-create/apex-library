@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APEX FISHING — THE LADDER</title>
+<link rel="icon" href="data:,">
+<style>
+  /* THE LADDER — one game, ten fish, ten lures. Holly's design
+     (Nov 27, 2026): the fishing games as ONE app with a ladder of
+     levels, each level introducing the next fish as it goes.
+     The mount is a character — Big Mouth Billy is the founding
+     inspiration of this build, and the catch screen knows it. */
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:#0a140f;color:#eaf6ef;font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+  body{padding:12px 10px 26px;max-width:860px;margin:0 auto}
+  h1{font-size:23px;letter-spacing:.12em;color:#e8c85a;text-align:center;margin-top:4px}
+  .sub{text-align:center;color:#9db8a8;font-size:11.5px;letter-spacing:.2em;margin:4px 0 12px}
+  h2{font-size:15px;letter-spacing:.16em;color:#e8c85a;margin:16px 0 8px;border-bottom:1px solid #2c5a3c;padding-bottom:5px}
+  button{font-family:inherit;cursor:pointer}
+  .btn{background:#17382a;color:#eaf6ef;border:1px solid #2c5a3c;border-radius:8px;
+    padding:10px 14px;font-size:14px;letter-spacing:.08em}
+  .btn:active{transform:translateY(1px)}
+  .btn.gold{background:#e8c85a;color:#14240f;border-color:#e8c85a;font-weight:800}
+  .btn:disabled{opacity:.38;cursor:default}
+  .screen{display:none}
+  .screen.on{display:block}
+
+  /* ladder map */
+  .rungs{display:flex;flex-direction:column;gap:8px}
+  .rung{display:flex;align-items:center;gap:12px;background:#0f2016;border:1px solid #2c5a3c;
+    border-radius:10px;padding:10px 12px;text-align:left;width:100%;color:#eaf6ef}
+  .rung .num{font-size:20px;font-weight:800;color:#e8c85a;width:30px;text-align:center}
+  .rung .who{flex:1}
+  .rung .who b{font-size:16px;letter-spacing:.06em}
+  .rung .who .meta{display:block;color:#9db8a8;font-size:11.5px;margin-top:2px;letter-spacing:.04em}
+  .rung .stat{font-size:11.5px;color:#5ee07d;text-align:right;letter-spacing:.05em;white-space:nowrap}
+  .rung.locked{opacity:.45}
+  .rung.done{border-color:#e8c85a}
+  .rung canvas{border-radius:6px;background:#123}
+
+  /* intro / fact card */
+  .card{background:#0f2016;border:1px solid #2c5a3c;border-radius:12px;padding:16px}
+  .card h3{color:#e8c85a;letter-spacing:.1em;font-size:18px;margin-bottom:6px}
+  .card p{font-size:13.5px;line-height:1.65;color:#d9ecdf;margin:6px 0}
+  .card .lbl{color:#9db8a8;font-size:11px;letter-spacing:.18em;margin-top:12px}
+  .card .val{font-size:13.5px;color:#eaf6ef;line-height:1.55}
+
+  /* water */
+  #stageWrap{position:relative}
+  canvas#stage{width:100%;display:block;border:1px solid #2c5a3c;border-radius:10px;background:#123}
+  #hud{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px;font-size:12.5px}
+  #hud .chip{background:#0f2016;border:1px solid #2c5a3c;border-radius:20px;padding:5px 11px;letter-spacing:.05em}
+  #hud .chip b{color:#e8c85a}
+  #status{font-size:15px;color:#e8c85a;letter-spacing:.06em;min-height:22px;margin:6px 0 2px}
+  #hint{font-size:12.5px;color:#9db8a8;min-height:18px;letter-spacing:.04em}
+  .meters{display:flex;gap:14px;margin:8px 0}
+  .meter{flex:1}
+  .meter .mlab{font-size:10.5px;letter-spacing:.16em;color:#9db8a8;margin-bottom:3px}
+  .mbar{height:12px;background:#0f2016;border:1px solid #2c5a3c;border-radius:6px;overflow:hidden;position:relative}
+  .mfill{height:100%;width:0%;transition:width .12s linear}
+  .mzone{position:absolute;top:0;bottom:0;background:rgba(94,224,125,.25)}
+  #controls{display:flex;gap:10px;margin-top:10px}
+  #btnAction{flex:1;font-size:18px;padding:16px;font-weight:800;letter-spacing:.1em}
+  #btnSing{background:#3a2c10;border-color:#e8c85a;color:#e8c85a;font-weight:800}
+
+  /* tackle box */
+  #tackle{display:flex;gap:8px;overflow-x:auto;padding:8px 2px;-webkit-overflow-scrolling:touch}
+  .lure{flex:0 0 auto;width:118px;background:#0f2016;border:1px solid #2c5a3c;border-radius:10px;
+    padding:8px;color:#eaf6ef;text-align:left}
+  .lure.sel{border-color:#e8c85a;background:#1a2f1c}
+  .lure b{display:block;font-size:12.5px;letter-spacing:.03em;margin:4px 0 2px}
+  .lure .tech{font-size:10.5px;color:#5ee07d;letter-spacing:.05em}
+  .lure .fav{font-size:10px;color:#e8c85a;letter-spacing:.05em;min-height:13px}
+
+  /* catch screen */
+  #catchWrap{text-align:center}
+  #mountStage{width:100%;max-width:560px;display:block;margin:0 auto;border-radius:12px}
+  #catchTitle{font-size:20px;color:#e8c85a;letter-spacing:.08em;margin:10px 0 2px}
+  #catchLine{font-size:15px;line-height:1.6}
+  #catchFlags{font-size:14px;color:#5ee07d;line-height:1.7;min-height:24px;font-weight:700}
+  #catchFlags .same{color:#ffb52e}
+  .row{display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+  .foot{text-align:center;color:#5f7a68;font-size:10.5px;letter-spacing:.16em;margin-top:22px;line-height:1.7}
+  table.sum{width:100%;border-collapse:collapse;font-size:13.5px}
+  table.sum td,table.sum th{padding:6px 4px;text-align:left;border-bottom:1px solid #1b3223}
+  table.sum th{color:#9db8a8;font-size:11px;letter-spacing:.14em}
+  .gold{color:#e8c85a}
+</style>
+</head>
+<body>
+
+<!-- ============ LADDER MAP ============ -->
+<div class="screen on" id="scrMap">
+  <h1>★ APEX FISHING — THE LADDER</h1>
+  <div class="sub">TEN FISH · TEN LURES · ONE CLIMB</div>
+  <div class="rungs" id="rungs"></div>
+  <div class="foot">LAND THE TARGET FISH TO OPEN THE NEXT RUNG<br>EVERY FISH YOU HAVE OPENED KEEPS SWIMMING ON EVERY WATER</div>
+</div>
+
+<!-- ============ LEVEL INTRO ============ -->
+<div class="screen" id="scrIntro">
+  <h1 id="introTitle">LEVEL 1</h1>
+  <div class="sub" id="introSub">A NEW FISH</div>
+  <div class="card" id="introCard"></div>
+  <div class="row">
+    <button class="btn" id="btnIntroBack">← THE LADDER</button>
+    <button class="btn gold" id="btnFish">FISH THIS WATER →</button>
+  </div>
+</div>
+
+<!-- ============ WATER ============ -->
+<div class="screen" id="scrWater">
+  <div id="hud"></div>
+  <div id="stageWrap"><canvas id="stage" width="800" height="450"></canvas></div>
+  <div id="status">ON THE WATER</div>
+  <div id="hint"></div>
+  <div class="meters">
+    <div class="meter" id="mTension" style="display:none"><div class="mlab">LINE TENSION</div>
+      <div class="mbar"><div class="mzone" style="left:35%;width:40%"></div><div class="mfill" id="fTension" style="background:#ffb52e"></div></div></div>
+    <div class="meter" id="mProgress" style="display:none"><div class="mlab">BRINGING IT IN</div>
+      <div class="mbar"><div class="mfill" id="fProgress" style="background:#5ee07d"></div></div></div>
+    <div class="meter" id="mInterest" style="display:none"><div class="mlab">INTEREST</div>
+      <div class="mbar"><div class="mfill" id="fInterest" style="background:#a8d4f0"></div></div></div>
+  </div>
+  <div id="controls">
+    <button class="btn" id="btnBack">← LADDER</button>
+    <button class="btn gold" id="btnAction">CAST</button>
+  </div>
+  <h2>TACKLE BOX — THE LURE IS HALF THE FISHING</h2>
+  <div id="tackle"></div>
+  <div class="foot">HOLD THE BIG BUTTON (OR SPACE) TO REEL · CADENCE IS THE TECHNIQUE<br>EVERY LURE CARD NAMES ITS TECHNIQUE — WORK IT THE WAY IT SAYS</div>
+</div>
+
+<!-- ============ CATCH / MOUNT ============ -->
+<div class="screen" id="scrCatch">
+  <h1>★ ON THE WALL</h1>
+  <div class="sub" id="catchPres">BROADSIDE CLASSIC</div>
+  <div id="catchWrap">
+    <canvas id="mountStage" width="560" height="380"></canvas>
+    <div id="catchTitle"></div>
+    <div id="catchLine"></div>
+    <div id="catchFlags"></div>
+    <div class="row">
+      <button class="btn" id="btnSing">♪ MAKE IT SING</button>
+      <button class="btn gold" id="btnAgain">FISH AGAIN →</button>
+      <button class="btn" id="btnCatchMap">THE LADDER</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SUMMATION ============ -->
+<div class="screen" id="scrDone">
+  <h1>★ LADDER COMPLETE</h1>
+  <div class="sub">BLUEGILL TO BLUE MARLIN — THE WHOLE CLIMB</div>
+  <div id="doneBody"></div>
+  <div class="row"><button class="btn gold" id="btnDoneMap">BACK TO THE LADDER</button></div>
+  <div class="foot">THE WATER STAYS OPEN — EVERY RUNG, EVERY FISH, ANY TIME</div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   DATA — species. Colours, patterns, size ranges, condition factors and
+   favored lures are the faces' own CFG data (apex-library/faces/*.html).
+   Depth bands, fight weights, strike temperaments and techniques are
+   this build's design layer over that data, tuned per real fish.
+   ===================================================================== */
+function F(o){ return o; }
+var SPECIES = [
+ F({ slug:"bluegill", name:"Bluegill", hue:205, sat:38, backL:30, flankL:48, bellyL:76, pattern:"bars", tail:"round",
+     lenMin:5, lenMax:11, cond:55, earflap:true, sky:["#cdeeda","#f4f2d2"], water:["#4c8a68","#17382a"], weed:"#35684a",
+     band:[0.38,0.62], bandLabel:"weed beds & dock shade, mid-shallow",
+     fight:{run:.20, jump:0, shake:.30, dive:.20, stamina:20, strength:.25, style:"Dart & Circle"},
+     strike:{bold:.95, hook:"snap", windowMs:650, delayMs:0},
+     speed:"slow", handling:"steady", handlingName:"Steady — it tires in circles, just keep winding",
+     fact:"A sunfish that nests in colonies in late spring — the male fans a saucer in the gravel and guards it against all comers. In Michigan it is everybody's first fish: inland lakes, ponds and slow rivers, statewide." }),
+ F({ slug:"largemouth-bass", name:"Largemouth Bass", hue:96, sat:42, backL:26, flankL:44, bellyL:76, pattern:"lateral", tail:"forked",
+     lenMin:10, lenMax:26, cond:50, sky:["#bfe3ee","#e8f2d8"], water:["#3d7a5a","#123527"], weed:"#2c5a3c",
+     band:[0.30,0.55], bandLabel:"weed lines & fallen timber, shallow",
+     fight:{run:.50, jump:.80, shake:.60, dive:.30, stamina:35, strength:.45, style:"Leaper & Head-Shaker"},
+     strike:{bold:.80, hook:"snap", windowMs:550, delayMs:0},
+     speed:"medium", handling:"pressure", handlingName:"Pressure — keep winding, and ease off only when it jumps",
+     fact:"An ambush fish: it sits in the weeds and inhales whatever passes close. Hooked, it heads for the sky and shakes its head to throw the hook. Michigan grows them in nearly every warm inland lake." }),
+ F({ slug:"smallmouth-bass", name:"Smallmouth Bass", hue:36, sat:40, backL:28, flankL:46, bellyL:76, pattern:"bars", tail:"forked",
+     lenMin:10, lenMax:21, cond:52, sky:["#d8e6ea","#f0ecd8"], water:["#4f7d74","#18322c"], weed:"#2e5642",
+     band:[0.45,0.70], bandLabel:"rock piles & current breaks, deeper than its cousin",
+     fight:{run:.60, jump:.90, shake:.50, dive:.40, stamina:40, strength:.50, style:"Sky Rocket"},
+     strike:{bold:.70, hook:"snap", windowMs:500, delayMs:0},
+     speed:"medium", handling:"pressure", handlingName:"Pressure — pound for pound it out-fights the largemouth; don't give it slack",
+     fact:"The bronze fighter of rock and current. It leaps more and pulls harder for its size than the largemouth — anglers call it the strongest fish per pound in fresh water. Great Lakes shorelines are Michigan trophy water." }),
+ F({ slug:"rainbow-trout", name:"Rainbow Trout", hue:168, sat:34, backL:30, flankL:52, bellyL:82, pattern:"speckle", tail:"square",
+     lenMin:8, lenMax:24, cond:40, sky:["#cfe8f2","#f2f0da"], water:["#3f8a8a","#143838"], weed:"#2e5c46",
+     band:[0.25,0.50], bandLabel:"current seams & pool heads, upper-mid water",
+     fight:{run:.70, jump:.60, shake:.40, dive:.30, stamina:38, strength:.48, style:"Sprinter"},
+     strike:{bold:.55, hook:"snap", windowMs:480, delayMs:0},
+     speed:"medium", handling:"let-run", handlingName:"Let it run — soft mouth; a hard hand tears the hook free",
+     fact:"A cold-water fish of clear streams, rising to insects and flashing that pink band when it turns. Michigan stocks rainbows widely — and the ones that run out to the big lakes come back as steelhead, later on this ladder." }),
+ F({ slug:"walleye", name:"Walleye", hue:46, sat:36, backL:28, flankL:46, bellyL:78, pattern:"mottle", tail:"forked",
+     lenMin:14, lenMax:31, cond:44, teeth:true, sky:["#e8c9a0","#f2ddba"], water:["#4a6a72","#14242c"], weed:"#2c4636",
+     band:[0.60,0.85], bandLabel:"deep breaks & low light — a night fish",
+     fight:{run:.40, jump:.05, shake:.30, dive:.80, stamina:45, strength:.55, style:"Deep Bulldog"},
+     strike:{bold:.45, hook:"let-take", windowMs:850, delayMs:700},
+     speed:"slow", handling:"pump", handlingName:"Pump & wind — it bulldogs deep and shakes; lift, wind down, lift again",
+     fact:"Built for the dark: a reflective layer in the eye gathers light, so walleye feed at night and sulk deep at noon. It often mouths a bait before committing — let it take. Michigan's Lake Erie and Saginaw Bay walleye are famous." }),
+ F({ slug:"northern-pike", name:"Northern Pike", hue:96, sat:34, backL:28, flankL:44, bellyL:74, pattern:"lightspots", tail:"forked",
+     lenMin:18, lenMax:44, cond:30, teeth:true, sky:["#c4dce8","#e8f0e2"], water:["#38685a","#10281f"], weed:"#28503a",
+     band:[0.30,0.55], bandLabel:"weed ambush points, mid-shallow",
+     fight:{run:.80, jump:.30, shake:.50, dive:.40, stamina:50, strength:.65, style:"First-Run Rocket"},
+     strike:{bold:.85, hook:"snap", windowMs:500, delayMs:0},
+     speed:"fast", handling:"pressure", handlingName:"Pressure — survive the first run, then keep it coming; watch the teeth",
+     fact:"A torpedo with teeth that hunts by ambush from the weeds — the strike is an explosion, not a nibble. Northern Michigan lakes hold pike that have never seen a lure. Handle with care: the mouth is full of razors." }),
+ F({ slug:"michigan-steelhead", name:"Michigan Steelhead", hue:208, sat:16, backL:36, flankL:60, bellyL:88, pattern:"speckle", tail:"forked",
+     lenMin:18, lenMax:36, cond:42, mi:true, sky:["#cfe0ea","#eef2ee"], water:["#4a7a86","#16323c"], weed:"#33523f",
+     band:[0.35,0.60], bandLabel:"river runs & pool tails, mid water",
+     fight:{run:.95, jump:.85, shake:.40, dive:.40, stamina:60, strength:.70, style:"Chrome Rocket"},
+     strike:{bold:.60, hook:"snap", windowMs:480, delayMs:0},
+     speed:"medium", handling:"let-run", handlingName:"Let it run — chase with the drag, wind when it turns; never clamp down on a run",
+     fact:"A rainbow trout that went to the Great Lakes and came back chrome — stronger, bigger, and acrobatic past reason. Michigan's Pere Marquette and Manistee rivers are world-famous steelhead water. This one has Michigan in its name because it earned it." }),
+ F({ slug:"chinook-salmon", name:"Chinook Salmon", hue:210, sat:20, backL:32, flankL:56, bellyL:86, pattern:"spots", tail:"forked",
+     lenMin:24, lenMax:46, cond:46, sky:["#d4dee2","#eef0ea"], water:["#52707a","#1a2e36"], weed:"#2e4c3a",
+     band:[0.55,0.85], bandLabel:"deep open water & river mouths",
+     fight:{run:.90, jump:.40, shake:.30, dive:.70, stamina:75, strength:.80, style:"Freight Train"},
+     strike:{bold:.50, hook:"let-take", windowMs:750, delayMs:450},
+     speed:"slow", handling:"pump", handlingName:"Pump & wind — long deep runs; gain line in the pauses, never horse it",
+     fact:"The king salmon. Michigan planted chinook in the Great Lakes in the 1960s to eat the alewife swarms — and built a legendary fishery. Fall fish run the rivers heavy and dark; lake fish are silver freight trains." }),
+ F({ slug:"muskie", name:"Muskie", hue:88, sat:30, backL:26, flankL:42, bellyL:72, pattern:"bars", tail:"forked",
+     lenMin:30, lenMax:54, cond:34, teeth:true, sky:["#b8d2de","#e2ecda"], water:["#2f5c4c","#0c211a"], weed:"#224434",
+     band:[0.35,0.60], bandLabel:"weed edges & the follow — it comes to look",
+     fight:{run:.70, jump:.50, shake:.80, dive:.50, stamina:70, strength:.85, style:"Head-Shake Brawler"},
+     strike:{bold:.35, hook:"snap", windowMs:650, delayMs:0},
+     speed:"fast", handling:"pressure", handlingName:"Pressure — set the hook HARD, keep it tight; the head-shake throws more hooks than the run",
+     fact:"The fish of ten thousand casts. A muskie will follow a lure to the boat just to look at it — most follows never strike, and that is the game. Michigan's Lake St. Clair is one of the great muskie waters on Earth." }),
+ F({ slug:"blue-marlin", name:"Blue Marlin", hue:226, sat:52, backL:24, flankL:44, bellyL:80, pattern:"stripes", tail:"forked",
+     lenMin:7, lenMax:11.5, cond:520, condDiv:1000, unit:"FT", bill:true, sky:["#a8d4f0","#dff2f8"], water:["#1d5f9e","#082a52"], weed:"#1a4a6a",
+     band:[0.10,0.35], bandLabel:"open-ocean surface — a different world of water",
+     fight:{run:1.0, jump:1.0, shake:.60, dive:.80, stamina:110, strength:1.0, style:"Greyhounding Giant"},
+     strike:{bold:.55, hook:"let-take", windowMs:900, delayMs:900},
+     speed:"fast", handling:"let-run", handlingName:"Let it run, then pump & wind in the rests — this is an hour's fight in other men's stories",
+     fact:"The crown. Among the fastest fish in the ocean, a marlin greyhounds across the surface in a line of leaps and can sound hundreds of feet down. No Michigan water holds one — you fished your way out of home water to stand here." })
+];
+var BY_SLUG = {}; SPECIES.forEach(function(s){ BY_SLUG[s.slug] = s; });
+
+/* =====================================================================
+   DATA — lures. Each lure is its own thing: its own look, its own
+   action in the water, and its own TECHNIQUE. The fish judge the
+   technique, not just the lure. favored/also are species slugs, from
+   the faces' own lure assignments (plus the house minnow rig).
+   technique targets: spd = ideal retrieve speed band (line-speed
+   units), pause = ideal still fraction, jerk = ideal cadence events.
+   ===================================================================== */
+var LURES = [
+ { kind:"beetle",   name:"Beetle Spin", tech:"Slow Roll",      techHow:"reel slow and steady, no pauses",        depthBias:0.45, spd:[0.10,0.34], pause:[0.00,0.25], jerk:[0,2],  favored:["bluegill"],        also:["largemouth-bass"] },
+ { kind:"longbody", name:"Rapala",      tech:"Twitch & Pause", techHow:"short jerks, then let it sit",           depthBias:0.22, spd:[0.15,0.45], pause:[0.30,0.65], jerk:[3,99], favored:["largemouth-bass"], also:["northern-pike","smallmouth-bass"] },
+ { kind:"tube",     name:"Tube Jig",    tech:"Bottom Bounce",  techHow:"lift, drop, drag it along the bottom",   depthBias:0.90, spd:[0.08,0.35], pause:[0.25,0.60], jerk:[2,99], favored:["smallmouth-bass"], also:["walleye","bluegill"] },
+ { kind:"spinner",  name:"Aglia",       tech:"Steady Retrieve",techHow:"one constant speed, blade turning",      depthBias:0.45, spd:[0.38,0.65], pause:[0.00,0.15], jerk:[0,1],  favored:["rainbow-trout"],   also:["michigan-steelhead","northern-pike"] },
+ { kind:"shadrap",  name:"Shad Rap",    tech:"Crank Steady",   techHow:"crank it steady, a touch quicker",       depthBias:0.65, spd:[0.50,0.78], pause:[0.00,0.15], jerk:[0,1],  favored:["walleye"],         also:["smallmouth-bass","chinook-salmon"] },
+ { kind:"minnow",   name:"Minnow Rig",  tech:"Dead-Stick",     techHow:"cast it out and WAIT — let it sit",      depthBias:0.80, spd:[0.00,0.10], pause:[0.80,1.00], jerk:[0,0],  favored:["walleye"],         also:["bluegill","rainbow-trout"] },
+ { kind:"dardevle", name:"Dardevle",    tech:"Flutter Fall",   techHow:"lift it, then let it flutter down",      depthBias:0.60, spd:[0.10,0.40], pause:[0.35,0.70], jerk:[2,99], favored:["northern-pike"],   also:["muskie","rainbow-trout"] },
+ { kind:"spoon",    name:"Mauler",      tech:"Lift & Drop",    techHow:"rhythmic lifts and drops, mid water",    depthBias:0.50, spd:[0.15,0.45], pause:[0.20,0.55], jerk:[3,99], favored:["michigan-steelhead"], also:["chinook-salmon","rainbow-trout"] },
+ { kind:"plug",     name:"Kwikfish",    tech:"Slow Troll",     techHow:"dead-slow and steady, deep",             depthBias:0.80, spd:[0.08,0.28], pause:[0.00,0.20], jerk:[0,1],  favored:["chinook-salmon"],  also:["michigan-steelhead","walleye"] },
+ { kind:"bucktail", name:"Bucktail",    tech:"Fast Burn",      techHow:"burn it fast and steady, no pauses",     depthBias:0.35, spd:[0.70,1.00], pause:[0.00,0.10], jerk:[0,1],  favored:["muskie"],           also:["northern-pike"] },
+ { kind:"squid",    name:"Squid Skirt", tech:"Troll & Surge",  techHow:"steady pull with surges — speed up, settle", depthBias:0.18, spd:[0.45,0.85], pause:[0.00,0.20], jerk:[1,6], favored:["blue-marlin"],    also:[] }
+];
+var LURE_BY_KIND = {}; LURES.forEach(function(l){ LURE_BY_KIND[l.kind] = l; });
+function lureMatch(lure, slug){
+  if(lure.favored.indexOf(slug) >= 0) return 1.0;
+  if(lure.also.indexOf(slug) >= 0) return 0.55;
+  return 0.08;
+}
+function favoredLures(slug){
+  return LURES.filter(function(l){ return l.favored.indexOf(slug) >= 0; });
+}
+/* technique targets in DUTY terms — the fraction of the retrieve the
+   player spends winding. Cadence (duty + press transitions) is what
+   the one reel control can actually express, so the techniques are
+   scored on it: dead-stick is a near-zero duty, a fast burn is a
+   full-duty wind, twitch-and-pause lives in between with jerks. */
+var TECH_DUTY = { beetle:[0.45,0.75], longbody:[0.30,0.60], tube:[0.30,0.60],
+  spinner:[0.80,1.00], shadrap:[0.82,0.98], minnow:[0.00,0.15], dardevle:[0.25,0.55],
+  spoon:[0.35,0.65], plug:[0.55,0.85], bucktail:[0.90,1.00], squid:[0.60,0.95] };
+LURES.forEach(function(l){ l.duty = TECH_DUTY[l.kind] || [0.4, 0.7]; });
+
+/* =====================================================================
+   STATE & MEMORY — the game remembers. Three stores:
+   - apex-fishing-board-v1   : the house board (shared with the faces
+                               and board.html — catches post there in
+                               the faces' own record shape)
+   - apex-fishing-ladder-v1  : ladder progress (rungs open, target
+                               counts, last presentation, ladder done)
+   - apex-fishing-ladder-log-v1 : the catch log — every catch, species
+                               + size, kept for personal bests and for
+                               SAME SIZE TWICE.
+   ===================================================================== */
+var BOARD_KEY = "apex-fishing-board-v1";
+var PROG_KEY  = "apex-fishing-ladder-v1";
+var LOG_KEY   = "apex-fishing-ladder-log-v1";
+var CATCH_GOAL = 2;              /* target fish per rung (marlin: 1) */
+function goalFor(idx){ return idx === SPECIES.length - 1 ? 1 : CATCH_GOAL; }
+
+function loadJSON(k, dflt){ try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? dflt : v; } catch(e){ return dflt; } }
+function saveJSON(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+
+var prog = loadJSON(PROG_KEY, null);
+if(!prog || typeof prog.unlocked !== "number"){
+  prog = { unlocked: 1, targetCaught: {}, totalCatches: 0, lastPres: "", done: false };
+}
+var catchLog = loadJSON(LOG_KEY, []);
+if(!Array.isArray(catchLog)) catchLog = [];
+
+function personalBest(slug){
+  var best = null;
+  catchLog.forEach(function(c){ if(c.slug === slug && (!best || c.lbs > best.lbs)) best = c; });
+  return best;
+}
+function catchesOf(slug){ return catchLog.filter(function(c){ return c.slug === slug; }).length; }
+
+/* the catch roll — the faces' own math: seeded RNG, age classes,
+   length inside the class band, weight = len^3 * cond / condDiv.
+   Sizes genuinely vary, so a repeated size is a real event. */
+function RNG(seed){ var s = (seed >>> 0) || 1; return function(){ s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+function rollCatch(sp, seed){
+  var r = RNG(seed), au = r(), ageClass = "prime";
+  if(au < 0.30) ageClass = "young"; else if(au >= 0.95) ageClass = "dinosaur"; else if(au >= 0.75) ageClass = "old";
+  var span = sp.lenMax - sp.lenMin, lenIn;
+  if(ageClass === "young") lenIn = sp.lenMin + r() * 0.35 * span;
+  else if(ageClass === "old") lenIn = sp.lenMax - 0.35 * span + r() * 0.35 * span;
+  else if(ageClass === "dinosaur") lenIn = sp.lenMax + r() * 0.12 * span;
+  else lenIn = sp.lenMin + r() * span;
+  var lbs = Math.pow(lenIn, 3) * sp.cond / (sp.condDiv || 100000);
+  var hueJ = (r() * 14 - 7);
+  return { slug: sp.slug, fish: sp.name, len: +lenIn.toFixed(1), unit: sp.unit || "IN",
+           lbs: +lbs.toFixed(1), age: ageClass, seed: seed, hueJ: hueJ,
+           when: new Date().toISOString() };
+}
+
+/* =====================================================================
+   SCREENS
+   ===================================================================== */
+function show(id){
+  ["scrMap","scrIntro","scrWater","scrCatch","scrDone"].forEach(function(s){
+    document.getElementById(s).classList.toggle("on", s === id);
+  });
+  window.scrollTo(0, 0);
+}
+var curLevel = 0;          /* ladder index being fished / introduced */
+var selLure = LURES[0];    /* tackle selection */
+
+/* ---- ladder map ---- */
+function fishThumb(cv, sp, locked){
+  var x = cv.getContext("2d");
+  x.clearRect(0, 0, cv.width, cv.height);
+  x.save(); x.translate(cv.width / 2, cv.height / 2);
+  if(locked){ x.fillStyle = "#274435"; drawBody(x, sp, 74, 0, 1, 0); }
+  else { drawBody(x, sp, 74, sp.hueJ || 0, 1, 0); }
+  x.restore();
+}
+function renderMap(){
+  var wrap = document.getElementById("rungs"); wrap.innerHTML = "";
+  SPECIES.forEach(function(sp, i){
+    var locked = i >= prog.unlocked;
+    var b = document.createElement("button"); b.className = "rung" + (locked ? " locked" : "") +
+      ((prog.targetCaught[sp.slug] || 0) >= goalFor(i) ? " done" : "");
+    var cv = document.createElement("canvas"); cv.width = 92; cv.height = 44;
+    fishThumb(cv, sp, locked);
+    var who = document.createElement("span"); who.className = "who";
+    var pb = personalBest(sp.slug);
+    who.innerHTML = locked
+      ? "<b>· · ·</b><span class='meta'>RUNG " + (i + 1) + " — LAND THE FISH BELOW TO OPEN</span>"
+      : "<b>" + sp.name.toUpperCase() + "</b><span class='meta'>HOLDS: " + sp.bandLabel +
+        " · FIGHTS: " + sp.fight.style + "</span>";
+    var stat = document.createElement("span"); stat.className = "stat";
+    if(!locked){
+      var tc = prog.targetCaught[sp.slug] || 0;
+      stat.innerHTML = "LANDED " + catchesOf(sp.slug) +
+        (pb ? "<br>BEST " + pb.lbs.toFixed(1) + " LB" : "") +
+        (tc >= goalFor(i) ? "<br><span class='gold'>RUNG CLEARED ★</span>" : "<br>TARGET " + tc + "/" + goalFor(i));
+    }
+    b.appendChild(cv); b.appendChild(who); b.appendChild(stat);
+    if(!locked) b.addEventListener("click", function(){ openIntro(i); });
+    wrap.appendChild(b);
+  });
+}
+
+/* ---- level introduction: fact card + lures + technique ---- */
+function openIntro(i){
+  curLevel = i;
+  var sp = SPECIES[i];
+  document.getElementById("introTitle").textContent = "LEVEL " + (i + 1) + " — " + sp.name.toUpperCase();
+  document.getElementById("introSub").textContent = i === 0 ? "THE STARTER FISH" :
+    (i === SPECIES.length - 1 ? "THE CROWN" : "A NEW FISH JOINS THE WATER");
+  var favs = favoredLures(sp.slug).map(function(l){ return l.name + " (" + l.tech + ")"; }).join(" · ");
+  var card = document.getElementById("introCard");
+  card.innerHTML =
+    "<h3>" + sp.name + "</h3><p>" + sp.fact + "</p>" +
+    "<div class='lbl'>WHERE IT HOLDS</div><div class='val'>" + sp.bandLabel + "</div>" +
+    "<div class='lbl'>HOW IT FIGHTS</div><div class='val'>" + sp.fight.style + "</div>" +
+    "<div class='lbl'>HOW THIS FISH IS FISHED</div><div class='val'>" +
+      "Presentation: " + sp.speed + " · Hookset: " + (sp.strike.hook === "snap" ? "snap it the instant it takes" : "let it take, then set") +
+      "<br>Fight handling: " + sp.handlingName + "</div>" +
+    "<div class='lbl'>THE LURES IT WANTS</div><div class='val'>" + favs +
+      "<br><span style='color:#9db8a8'>The wrong lure gets refused. The right lure worked wrong gets followed, not eaten.</span></div>" +
+    "<div class='lbl'>THE JOB</div><div class='val'>Land " + goalFor(i) + " " + sp.name +
+      " to open the next rung. Everything you have already opened keeps swimming here.</div>";
+  show("scrIntro");
+}
+document.getElementById("btnIntroBack").addEventListener("click", function(){ renderMap(); show("scrMap"); });
+document.getElementById("btnFish").addEventListener("click", function(){ startWater(curLevel); });
+document.getElementById("btnCatchMap").addEventListener("click", function(){ stopSing(); renderMap(); show("scrMap"); });
+document.getElementById("btnDoneMap").addEventListener("click", function(){ renderMap(); show("scrMap"); });
+
+/* =====================================================================
+   FISH DRAWING — one body plan per species, drawn from its own data:
+   colourway from the CFG hues, pattern by name, tail by name, the
+   bluegill's ear flap, the pike family's teeth, the marlin's bill.
+   pose: 0 = broadside swim · 1 = leaper arc · mouth: 0..1 openness.
+   ===================================================================== */
+function hsl(h, s, l){ return "hsl(" + ((h % 360) + 360) % 360 + "," + s + "%," + l + "%)"; }
+function drawBody(x, sp, lenPx, hueJ, dir, mouth){
+  var L = lenPx, H = L * (sp.slug === "bluegill" ? 0.52 : sp.slug === "blue-marlin" ? 0.26 : 0.34);
+  x.save(); x.scale(dir || 1, 1);
+  /* tail */
+  x.fillStyle = hsl(sp.hue + hueJ, sp.sat, sp.backL + 4);
+  x.beginPath();
+  var tx = -L * 0.5, tw = L * 0.16;
+  if(sp.tail === "round"){ x.ellipse(tx - tw * 0.4, 0, tw * 0.55, H * 0.42, 0, 0, Math.PI * 2); }
+  else if(sp.tail === "square"){ x.rect(tx - tw, -H * 0.36, tw, H * 0.72); }
+  else { x.moveTo(tx, 0); x.lineTo(tx - tw, -H * 0.52); x.lineTo(tx - tw * 0.72, 0); x.lineTo(tx - tw, H * 0.52); x.closePath(); }
+  x.fill();
+  /* body */
+  var g = x.createLinearGradient(0, -H / 2, 0, H / 2);
+  g.addColorStop(0, hsl(sp.hue + hueJ, sp.sat, sp.backL));
+  g.addColorStop(0.55, hsl(sp.hue + hueJ, sp.sat, sp.flankL));
+  g.addColorStop(1, hsl(sp.hue + hueJ, sp.sat - 6, sp.bellyL));
+  x.fillStyle = g;
+  x.beginPath();
+  x.moveTo(L * 0.5, 0);
+  x.bezierCurveTo(L * 0.30, -H * 0.55, -L * 0.25, -H * 0.52, -L * 0.5, -H * 0.08);
+  x.bezierCurveTo(-L * 0.5, H * 0.30, L * 0.28, H * 0.52, L * 0.5, 0);
+  x.fill();
+  /* pattern */
+  x.save();
+  x.beginPath();
+  x.moveTo(L * 0.5, 0);
+  x.bezierCurveTo(L * 0.30, -H * 0.55, -L * 0.25, -H * 0.52, -L * 0.5, -H * 0.08);
+  x.bezierCurveTo(-L * 0.5, H * 0.30, L * 0.28, H * 0.52, L * 0.5, 0);
+  x.clip();
+  var i;
+  if(sp.pattern === "bars"){
+    x.fillStyle = "rgba(10,20,14,0.28)";
+    for(i = 0; i < 6; i++){ var bx = L * 0.32 - i * L * 0.13; x.fillRect(bx, -H / 2, L * 0.045, H); }
+  } else if(sp.pattern === "lateral"){
+    x.fillStyle = "rgba(10,24,12,0.5)"; x.fillRect(-L * 0.5, -H * 0.07, L, H * 0.14);
+  } else if(sp.pattern === "speckle" || sp.pattern === "spots"){
+    x.fillStyle = "rgba(12,16,20,0.45)";
+    var sr = RNG(sp.slug.length * 977 + 13);
+    for(i = 0; i < 46; i++){ x.beginPath(); x.arc(-L * 0.45 + sr() * L * 0.9, -H * 0.42 + sr() * H * 0.8, L * 0.012 + sr() * L * 0.012, 0, Math.PI * 2); x.fill(); }
+    if(sp.slug === "rainbow-trout" || sp.slug === "michigan-steelhead"){
+      x.fillStyle = "rgba(232,120,160,0.35)"; x.fillRect(-L * 0.5, -H * 0.10, L, H * 0.20);
+    }
+  } else if(sp.pattern === "mottle"){
+    x.fillStyle = "rgba(30,26,10,0.35)";
+    var mr = RNG(41);
+    for(i = 0; i < 22; i++){ x.beginPath(); x.ellipse(-L * 0.45 + mr() * L * 0.9, -H * 0.4 + mr() * H * 0.75, L * 0.05, H * 0.10, mr(), 0, Math.PI * 2); x.fill(); }
+  } else if(sp.pattern === "lightspots"){
+    x.fillStyle = "rgba(240,244,220,0.5)";
+    var lr = RNG(97);
+    for(i = 0; i < 30; i++){ x.beginPath(); x.ellipse(-L * 0.45 + lr() * L * 0.9, -H * 0.4 + lr() * H * 0.8, L * 0.028, H * 0.07, 0.5, 0, Math.PI * 2); x.fill(); }
+  } else if(sp.pattern === "stripes"){
+    x.strokeStyle = "rgba(160,210,250,0.55)"; x.lineWidth = Math.max(1.5, L * 0.012);
+    for(i = 0; i < 7; i++){ var sx = L * 0.34 - i * L * 0.11; x.beginPath(); x.moveTo(sx, -H * 0.42); x.lineTo(sx - L * 0.03, H * 0.30); x.stroke(); }
+  }
+  x.restore();
+  /* dorsal fin */
+  x.fillStyle = hsl(sp.hue + hueJ, sp.sat, sp.backL + 2);
+  x.beginPath(); x.moveTo(L * 0.08, -H * 0.46); x.lineTo(-L * 0.18, -H * 0.48); x.lineTo(-L * 0.05, -H * 0.72); x.closePath(); x.fill();
+  /* bill (marlin) */
+  if(sp.bill){ x.fillStyle = hsl(sp.hue + hueJ, sp.sat, sp.backL + 10);
+    x.beginPath(); x.moveTo(L * 0.48, -H * 0.10); x.lineTo(L * 0.85, -H * 0.02); x.lineTo(L * 0.48, H * 0.08); x.closePath(); x.fill(); }
+  /* ear flap (bluegill) */
+  if(sp.earflap){ x.fillStyle = "#101418"; x.beginPath(); x.ellipse(L * 0.26, -H * 0.02, L * 0.045, H * 0.16, 0, 0, Math.PI * 2); x.fill(); }
+  /* eye */
+  x.fillStyle = "#0c0f0a"; x.beginPath(); x.arc(L * 0.36, -H * 0.12, Math.max(2, L * 0.028), 0, Math.PI * 2); x.fill();
+  x.fillStyle = "rgba(255,255,255,0.75)"; x.beginPath(); x.arc(L * 0.37, -H * 0.15, Math.max(1, L * 0.010), 0, Math.PI * 2); x.fill();
+  /* mouth — opens when the fish sings or strikes */
+  var mo = (mouth || 0);
+  x.strokeStyle = "rgba(8,10,8,0.8)"; x.lineWidth = Math.max(1.2, L * 0.012);
+  x.beginPath();
+  if(mo > 0.05){ x.fillStyle = "#5c1f1f"; x.beginPath(); x.ellipse(L * 0.485, H * 0.05, L * 0.028, H * 0.16 * mo + 1, 0, 0, Math.PI * 2); x.fill(); }
+  else { x.moveTo(L * 0.40, H * 0.10); x.quadraticCurveTo(L * 0.47, H * 0.14, L * 0.50, H * 0.04); x.stroke(); }
+  /* teeth hint */
+  if(sp.teeth){ x.fillStyle = "rgba(250,250,244,0.85)";
+    for(i = 0; i < 3; i++){ x.beginPath(); var txx = L * (0.44 + i * 0.02); x.moveTo(txx, H * 0.10); x.lineTo(txx + L * 0.008, H * 0.19); x.lineTo(txx + L * 0.016, H * 0.10); x.closePath(); x.fill(); } }
+  x.restore();
+}
+/* head-on view — the Billy pose: face to the player, mouth front */
+function drawFront(x, sp, s, mouth, t){
+  x.save();
+  var wob = Math.sin(t / 300) * 0.03;
+  x.rotate(wob);
+  var g = x.createRadialGradient(0, -s * 0.1, s * 0.1, 0, 0, s * 0.62);
+  g.addColorStop(0, hsl(sp.hue, sp.sat, sp.flankL + 8));
+  g.addColorStop(1, hsl(sp.hue, sp.sat, sp.backL));
+  x.fillStyle = g;
+  x.beginPath(); x.ellipse(0, 0, s * 0.52, s * 0.58, 0, 0, Math.PI * 2); x.fill();
+  /* gill plates */
+  x.strokeStyle = "rgba(10,16,12,0.35)"; x.lineWidth = s * 0.03;
+  x.beginPath(); x.arc(0, 0, s * 0.44, 0.5, Math.PI - 0.5); x.stroke();
+  x.beginPath(); x.arc(0, 0, s * 0.44, Math.PI + 0.5, Math.PI * 2 - 0.5); x.stroke();
+  /* pectoral fins, wagging with the song */
+  x.fillStyle = hsl(sp.hue, sp.sat, sp.backL + 6);
+  var wag = Math.sin(t / 130) * 0.35;
+  x.save(); x.translate(-s * 0.52, s * 0.12); x.rotate(0.7 + wag);
+  x.beginPath(); x.ellipse(-s * 0.12, 0, s * 0.16, s * 0.06, 0, 0, Math.PI * 2); x.fill(); x.restore();
+  x.save(); x.translate(s * 0.52, s * 0.12); x.rotate(-0.7 - wag);
+  x.beginPath(); x.ellipse(s * 0.12, 0, s * 0.16, s * 0.06, 0, 0, Math.PI * 2); x.fill(); x.restore();
+  /* eyes — they blink */
+  var blink = (t % 3400) < 110 ? 0.12 : 1;
+  [-1, 1].forEach(function(sd){
+    x.fillStyle = "#fff"; x.beginPath(); x.ellipse(sd * s * 0.20, -s * 0.16, s * 0.085, s * 0.095 * blink, 0, 0, Math.PI * 2); x.fill();
+    x.fillStyle = "#0c0f0a"; x.beginPath(); x.ellipse(sd * s * 0.20, -s * 0.15, s * 0.042, s * 0.05 * blink, 0, 0, Math.PI * 2); x.fill();
+  });
+  if(sp.bill){ x.fillStyle = hsl(sp.hue, sp.sat, sp.backL + 12);
+    x.beginPath(); x.moveTo(-s * 0.05, -s * 0.34); x.lineTo(0, -s * 0.78); x.lineTo(s * 0.05, -s * 0.34); x.closePath(); x.fill(); }
+  if(sp.earflap){ x.fillStyle = "#101418";
+    x.beginPath(); x.ellipse(-s * 0.47, -s * 0.05, s * 0.05, s * 0.10, 0, 0, Math.PI * 2); x.fill();
+    x.beginPath(); x.ellipse(s * 0.47, -s * 0.05, s * 0.05, s * 0.10, 0, 0, Math.PI * 2); x.fill(); }
+  /* THE MOUTH — the whole point of the fish */
+  var mo = Math.max(0.06, mouth || 0);
+  x.fillStyle = "#571d1d";
+  x.beginPath(); x.ellipse(0, s * 0.20, s * (0.10 + mo * 0.10), s * (0.03 + mo * 0.17), 0, 0, Math.PI * 2); x.fill();
+  x.fillStyle = "#8c3a3a";
+  x.beginPath(); x.ellipse(0, s * 0.235, s * (0.07 + mo * 0.07), s * (0.015 + mo * 0.08), 0, 0, Math.PI * 2); x.fill();
+  if(sp.teeth){ x.fillStyle = "rgba(250,250,244,0.9)";
+    for(var i = -2; i <= 2; i++){ x.beginPath(); var txx = i * s * 0.055;
+      x.moveTo(txx - s * 0.02, s * 0.155); x.lineTo(txx, s * 0.155 + s * 0.05 + mo * s * 0.03); x.lineTo(txx + s * 0.02, s * 0.155); x.closePath(); x.fill(); } }
+  x.restore();
+}
+
+/* =====================================================================
+   AUDIO — per-species jingles, Web Audio, no files. Small fish sing
+   high and quick; the marlin sings low and slow. The singing-fish
+   moment is the founding inspiration of this build (Big Mouth Billy),
+   so every species gets its own little song.
+   ===================================================================== */
+var AC = null;
+function audio(){ if(!AC){ try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} }
+  if(AC && AC.state === "suspended") AC.resume(); return AC; }
+var JINGLES = {  /* [steps of a pentatonic-ish climb, base Hz, note ms] */
+  "bluegill":          { base: 880,  notes: [0, 2, 4, 7, 4, 2, 0],     ms: 130 },
+  "largemouth-bass":   { base: 660,  notes: [0, 4, 2, 4, 7, 4],        ms: 150 },
+  "smallmouth-bass":   { base: 698,  notes: [0, 2, 4, 2, 4, 7, 4],     ms: 140 },
+  "rainbow-trout":     { base: 784,  notes: [0, 4, 7, 9, 7, 4, 2],     ms: 135 },
+  "walleye":           { base: 392,  notes: [0, 2, 4, 2, 0, -3, 0],    ms: 190 },
+  "northern-pike":     { base: 523,  notes: [0, 0, 4, 0, 7, 4, 0],     ms: 150 },
+  "michigan-steelhead":{ base: 587,  notes: [0, 4, 7, 4, 9, 7, 4, 2],  ms: 145 },
+  "chinook-salmon":    { base: 330,  notes: [0, 4, 2, 4, 7, 4, 2, 0],  ms: 180 },
+  "muskie":             { base: 262,  notes: [0, 3, 0, 4, 0, 7],        ms: 210 },
+  "blue-marlin":       { base: 196,  notes: [0, 4, 7, 12, 7, 4, 0],    ms: 240 }
+};
+var singTimers = [];
+function playJingle(slug, onNote){
+  var ac = audio(); if(!ac) { if(onNote) onNote(-1); return 0; }
+  var j = JINGLES[slug] || JINGLES["bluegill"];
+  var t0 = ac.currentTime + 0.03;
+  j.notes.forEach(function(n, i){
+    var f = j.base * Math.pow(2, n / 12);
+    var o = ac.createOscillator(), g = ac.createGain();
+    o.type = "triangle"; o.frequency.value = f;
+    var t = t0 + i * (j.ms / 1000);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + j.ms / 1000 * 0.92);
+    o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + j.ms / 1000);
+    if(onNote) singTimers.push(setTimeout(function(){ onNote(i); }, (t - ac.currentTime) * 1000));
+  });
+  return j.notes.length * j.ms;
+}
+function blip(freq, ms, type){
+  var ac = audio(); if(!ac) return;
+  var o = ac.createOscillator(), g = ac.createGain();
+  o.type = type || "sine"; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.12, ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + ms / 1000);
+  o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + ms / 1000);
+}
+function stopSing(){ singTimers.forEach(clearTimeout); singTimers = []; }
+
+/* =====================================================================
+   THE WATER — cast, retrieve, technique, strike, fight.
+   The retrieve IS the technique: the game reads the player's cadence
+   (speed, pauses, jerks) off the one reel control and scores it
+   against the lure's technique and the fish's own wants. Right lure +
+   right technique = strike. Right lure worked wrong = a follow.
+   Wrong lure = a refusal.
+   ===================================================================== */
+var cv = document.getElementById("stage"), cx = cv.getContext("2d");
+var W = 800, H = 450, SURF = 92;
+var G = {
+  state: "idle",           /* idle | power | retrieve | bite | fight | escape */
+  level: 0, sp: null,      /* target species of the rung */
+  power: 0, powerDir: 1,
+  lureX: 0, lureY: 0, lureDepth: 0.4, castDist: 0,
+  reeling: false, autoReel: false,
+  fish: null,              /* encounter */
+  bite: null,              /* {phase: delay|window, t} */
+  fight: null,
+  escT: 0, escMsg: "",
+  msg: "", hint: "",
+  reelHist: [],            /* {t, reeling} samples for cadence */
+  jerks: 0, lastReel: false,
+  t: 0
+};
+function setStatus(s){ G.msg = s; document.getElementById("status").textContent = s; }
+function setHint(s){ G.hint = s; document.getElementById("hint").textContent = s; }
+function meter(id, showId, v){
+  document.getElementById(id).style.width = Math.max(0, Math.min(100, v)) + "%";
+  if(showId) document.getElementById(showId).style.display = v == null ? "none" : "";
+}
+function showMeters(){
+  document.getElementById("mInterest").style.display = (G.state === "retrieve" && G.fish) ? "" : "none";
+  document.getElementById("mTension").style.display = G.state === "fight" ? "" : "none";
+  document.getElementById("mProgress").style.display = G.state === "fight" ? "" : "none";
+}
+function renderHUD(){
+  var sp = SPECIES[G.level];
+  var tc = prog.targetCaught[sp.slug] || 0;
+  document.getElementById("hud").innerHTML =
+    "<span class='chip'>LEVEL <b>" + (G.level + 1) + "</b> — " + sp.name.toUpperCase() + "</span>" +
+    "<span class='chip'>TARGET <b>" + tc + "/" + goalFor(G.level) + "</b></span>" +
+    "<span class='chip'>LURE <b>" + selLure.name + "</b> · " + selLure.tech + "</span>" +
+    "<span class='chip'>" + (G.fish && G.fish.known ? "ON THE WATER: <b>" + G.fish.sp.name.toUpperCase() + "</b>"
+                           : "ON THE WATER: <b>· · ·</b>") + "</span>";
+}
+function renderTackle(){
+  var wrap = document.getElementById("tackle"); wrap.innerHTML = "";
+  LURES.forEach(function(l){
+    var b = document.createElement("button");
+    b.className = "lure" + (l === selLure ? " sel" : "");
+    var fav = SPECIES[G.level];
+    var tag = l.favored.indexOf(fav.slug) >= 0 ? "★ WANTS THIS" :
+              (l.also.indexOf(fav.slug) >= 0 ? "will look" : "");
+    b.innerHTML = "<b>" + l.name + "</b><span class='tech'>" + l.tech + "</span>" +
+      "<span class='fav'>" + tag + "</span>";
+    b.addEventListener("click", function(){ selLure = l; renderTackle(); renderHUD(); blip(660, 60); });
+    wrap.appendChild(b);
+  });
+}
+function startWater(level){
+  G.level = level; G.sp = SPECIES[level];
+  G.state = "idle"; G.fish = null; G.fight = null; G.bite = null;
+  /* start on the fish's own lure — the player can always change it */
+  var fav = favoredLures(G.sp.slug)[0]; if(fav) selLure = fav;
+  renderHUD(); renderTackle(); show("scrWater");
+  setStatus("LEVEL " + (level + 1) + " — " + G.sp.name.toUpperCase() + " WATER");
+  setHint("CAST to put the " + selLure.name + " out · it holds: " + G.sp.bandLabel);
+  document.getElementById("btnAction").textContent = "CAST";
+  showMeters();
+}
+
+/* ---- encounter ---- */
+function pickEncounter(){
+  var pool = SPECIES.slice(0, prog.unlocked);
+  var target = SPECIES[G.level], roll = Math.random();
+  var sp = target;
+  if(roll > 0.55 && pool.length > 1){
+    var others = pool.filter(function(s){ return s !== target; });
+    sp = others[Math.floor(Math.random() * others.length)];
+  }
+  var bandC = (sp.band[0] + sp.band[1]) / 2;
+  return { sp: sp, x: 120 + Math.random() * 260, depth: bandC, interest: 0,
+           mode: "cruise", known: false, refuseT: 0, dir: 1, wob: Math.random() * 9 };
+}
+function castOut(){
+  G.castDist = 130 + G.power * 4.3;
+  G.lureX = 745 - G.castDist; G.lureDepth = 0.12;
+  G.state = "retrieve"; G.fish = pickEncounter();
+  G.reelHist = []; G.jerks = 0;
+  setStatus("OUT THERE — WORK THE " + selLure.name.toUpperCase());
+  setHint(selLure.tech + ": " + selLure.techHow);
+  document.getElementById("btnAction").textContent = "REEL (HOLD)";
+  blip(520, 70);
+  showMeters();
+}
+/* cadence: read the last 2 seconds of reel input */
+function cadence(){
+  var now = performance.now(), win = 2000, held = 0, trans = 0, last = null;
+  var h = G.reelHist.filter(function(s){ return now - s.t <= win; });
+  for(var i = 0; i < h.length; i++){
+    if(last !== null && h[i].r !== last) trans++;
+    last = h[i].r;
+    if(h[i].r) held += (i + 1 < h.length ? h[i + 1].t : now) - h[i].t;
+  }
+  return { duty: Math.min(1, held / win), jerks: trans };
+}
+function bandScore(v, band){
+  if(v >= band[0] && v <= band[1]) return 1;
+  var d = v < band[0] ? band[0] - v : v - band[1];
+  return Math.max(0, 1 - d * 3.2);
+}
+function techniqueScore(){
+  var c = cadence(), l = selLure, sp = G.fish ? G.fish.sp : G.sp;
+  /* the fish's own speed want shifts the lure's duty band */
+  var shift = sp.speed === "slow" ? -0.07 : sp.speed === "fast" ? 0.07 : 0;
+  var dut = bandScore(c.duty, [Math.max(0, l.duty[0] + shift), Math.min(1, l.duty[1] + shift)]);
+  var jrk;
+  if(l.jerk[1] <= 1) jrk = c.jerks <= 1 ? 1 : (c.jerks === 2 ? 0.55 : 0.2);
+  else jrk = (c.jerks >= l.jerk[0]) ? 1 : c.jerks / l.jerk[0];
+  return { score: 0.62 * dut + 0.38 * jrk, c: c };
+}
+
+/* ---- strike & hookset ---- */
+function startStrike(){
+  var sp = G.fish.sp;
+  G.state = "bite";
+  G.bite = { phase: sp.strike.delayMs > 0 ? "delay" : "window", t: 0, sp: sp };
+  document.getElementById("btnAction").textContent = sp.strike.hook === "snap" ? "SET THE HOOK!" : "WAIT FOR IT…";
+  if(sp.strike.delayMs > 0) setStatus(sp.name.toUpperCase() + " HAS IT — LET IT TAKE…");
+  else setStatus(sp.name.toUpperCase() + " STRUCK — SET THE HOOK!");
+  setHint("");
+  blip(190, 120, "square");
+}
+function hooksetAttempt(){
+  if(G.state !== "bite" || !G.bite) return;
+  var sp = G.bite.sp;
+  if(G.bite.phase === "delay"){
+    escape("PULLED IT AWAY — " + sp.name.toUpperCase() + " HAS TO TAKE IT FIRST. LET IT.");
+    return;
+  }
+  startFight(sp);
+}
+function startFight(sp){
+  G.state = "fight"; G.bite = null;
+  G.fight = { sp: sp, progress: 6, tension: 30, stamina: sp.fight.stamina,
+              phase: "run", phaseT: 900, t: 0, snapT: 0, pumps: 0, wasReeling: false, jumpWarned: false };
+  document.getElementById("btnAction").textContent = "REEL (HOLD)";
+  setStatus(sp.name.toUpperCase() + " ON — " + sp.fight.style.toUpperCase());
+  setHint(sp.handlingName);
+  showMeters();
+}
+function escape(msg){
+  G.state = "escape"; G.escT = 0; G.escMsg = msg; G.bite = null; G.fight = null;
+  setStatus(msg); setHint("");
+  document.getElementById("btnAction").textContent = "…";
+  showMeters();
+  blip(140, 220, "sawtooth");
+}
+function endRetrieve(){
+  G.state = "idle"; G.fish = null;
+  setStatus("LURE'S IN. CAST AGAIN.");
+  setHint("");
+  document.getElementById("btnAction").textContent = "CAST";
+  showMeters(); renderHUD();
+}
+
+/* ---- per-frame update ---- */
+var lastTs = 0;
+function frame(ts){
+  var dt = Math.min(0.05, (ts - lastTs) / 1000 || 0.016); lastTs = ts; G.t = ts;
+  var reeling = G.reeling || G.autoReel;
+  G.reelHist.push({ t: ts, r: reeling });
+  if(G.reelHist.length > 400) G.reelHist.splice(0, G.reelHist.length - 400);
+  if(reeling !== G.lastReel){ if(G.state === "retrieve") G.jerks++; G.lastReel = reeling; }
+
+  if(G.state === "power"){
+    G.power += G.powerDir * dt * 130;
+    if(G.power >= 100){ G.power = 100; G.powerDir = -1; }
+    if(G.power <= 0){ G.power = 0; G.powerDir = 1; }
+  }
+  else if(G.state === "retrieve" && G.fish){
+    /* lure travel + depth */
+    if(reeling) G.lureX += 150 * dt;
+    var dTarget = selLure.depthBias + (reeling ? -0.10 : 0.22);
+    if(selLure.kind === "minnow") dTarget = reeling ? 0.55 : 0.80;
+    G.lureDepth += (Math.max(0.06, Math.min(0.95, dTarget)) - G.lureDepth) * Math.min(1, dt * 1.6);
+    G.lureY = SURF + G.lureDepth * (H - SURF - 26);
+    if(G.lureX >= 726){ endRetrieve(); }
+
+    /* the fish reads the lure */
+    var f = G.fish, sp = f.sp;
+    f.wob += dt;
+    var dx = G.lureX - f.x, dy = (SURF + f.depth * (H - SURF - 26)) - 0;
+    var lureY = G.lureY;
+    var nearX = Math.abs(dx) < 110, nearD = Math.abs(G.lureDepth - f.depth) < 0.24;
+    if(f.mode === "cruise"){
+      f.x += Math.sin(f.wob * 0.7) * 14 * dt + f.dir * 6 * dt;
+      if(f.x < 60) f.dir = 1; if(f.x > 620) f.dir = -1;
+      if(nearX && nearD){ f.mode = "follow"; f.known = true; renderHUD();
+        setStatus("SOMETHING IS LOOKING — " + sp.name.toUpperCase()); }
+    } else if(f.mode === "follow"){
+      f.x += Math.max(-120 * dt, Math.min(120 * dt, dx * 1.6 * dt)) + dx * dt * 0.4;
+      f.depth += ((G.lureDepth) - f.depth) * dt * 0.8;
+      var m = lureMatch(selLure, sp.slug);
+      var ts2 = techniqueScore();
+      if(m <= 0.1){
+        f.refuseT += dt;
+        if(f.refuseT > 2.2){ f.mode = "refuse";
+          setStatus(sp.name.toUpperCase() + " REFUSED THE " + selLure.name.toUpperCase());
+          setHint("It wants: " + favoredLures(sp.slug).map(function(l){ return l.name; }).join(" · ")); }
+      } else {
+        var gain = 30 * m * ts2.score * sp.strike.bold;
+        if(m >= 0.5 && ts2.score < 0.45){
+          f.interest = Math.min(55, f.interest + gain * dt);
+          if(f.interest > 30) setHint("FOLLOWING — NOT COMMITTING. " + selLure.tech + ": " + selLure.techHow);
+        } else {
+          f.interest += gain * dt;
+          if(ts2.score >= 0.45 && m >= 0.5) setHint("");
+        }
+        meter("fInterest", null, f.interest);
+        if(f.interest >= 100) startStrike();
+      }
+    } else if(f.mode === "refuse"){
+      f.x -= 190 * dt; if(f.x < -80){ G.fish = null; showMeters(); }
+    }
+    showMeters();
+    if(G.fish) meter("fInterest", null, G.fish.interest);
+  }
+  else if(G.state === "bite" && G.bite){
+    G.bite.t += dt * 1000;
+    var sp2 = G.bite.sp;
+    if(G.bite.phase === "delay" && G.bite.t >= sp2.strike.delayMs){
+      G.bite.phase = "window"; G.bite.t = 0;
+      document.getElementById("btnAction").textContent = "SET THE HOOK!";
+      setStatus("NOW — SET IT!");
+      blip(240, 90, "square");
+    } else if(G.bite.phase === "window" && G.bite.t >= sp2.strike.windowMs){
+      escape(sp2.name.toUpperCase() + " SPIT IT — TOO LATE ON THE SET.");
+    }
+  }
+  else if(G.state === "fight" && G.fight){
+    var ft = G.fight, fsp = ft.sp, fw = fsp.fight;
+    ft.t += dt * 1000; ft.phaseT -= dt * 1000;
+    ft.stamina -= dt * (reeling ? 1.7 : 0.7);
+    var stamF = Math.max(0.25, ft.stamina / fw.stamina);
+    if(ft.phaseT <= 0){
+      var opts = [["cruise", 3], ["run", 2 + fw.run * 5], ["jump", fw.jump * 4], ["shake", fw.shake * 4],
+                  ["dive", fw.dive * 4], ["rest", 2.2]];
+      var tot = 0; opts.forEach(function(o){ tot += o[1]; });
+      var pick = Math.random() * tot, np = "cruise";
+      for(var oi = 0; oi < opts.length; oi++){ pick -= opts[oi][1]; if(pick <= 0){ np = opts[oi][0]; break; } }
+      ft.phase = np; ft.jumpWarned = false;
+      ft.phaseT = np === "rest" ? 1400 + Math.random() * 900 : 800 + Math.random() * 1100 * stamF;
+      if(np === "jump") setHint("IT'S AIRBORNE — EASE OFF!");
+      else if(np === "run") setHint(fsp.handling === "let-run" ? "IT'S RUNNING — LET IT!" : "IT'S RUNNING — KEEP PRESSURE!");
+      else if(np === "rest") setHint(fsp.handling === "pump" || fsp.handling === "let-run" ? "IT'S RESTING — PUMP & WIND!" : "IT'S RESTING — WIND!");
+      else if(np === "shake") setHint("HEAD-SHAKE — HOLD ON!");
+      else if(np === "dive") setHint("IT'S DIVING — STEADY!");
+      else setHint(fsp.handlingName);
+    }
+    /* pump detection: press-release cycles bank progress in rests */
+    if(reeling && !ft.wasReeling && ft.phase === "rest") ft.pumps++;
+    ft.wasReeling = reeling;
+    var inRun = ft.phase === "run" || ft.phase === "dive";
+    if(reeling){
+      var rate = inRun ? 0.7 : 2.3;
+      if(ft.phase === "rest" && (fsp.handling === "pump")) rate = 3.0;
+      ft.progress += rate * dt * 3.1;
+      if(ft.phase === "jump" && !ft.jumpWarned){
+        ft.jumpWarned = true;
+        if(Math.random() < 0.45){ escape(fsp.name.toUpperCase() + " THREW THE HOOK IN THE AIR — EASE OFF ON THE JUMP."); drawScene(); requestAnimationFrame(frame); return; }
+        ft.progress -= 7;
+      }
+    } else {
+      ft.progress -= (fsp.handling === "pressure" ? 1.5 : 0.45) * dt * 3.1;
+    }
+    if(ft.phase === "rest") ft.progress += ft.pumps * 0.0; /* pumps counted via rate above */
+    if(reeling && (inRun || ft.phase === "jump" || ft.phase === "shake")){
+      var load = fw.strength * (ft.phase === "jump" ? 60 : ft.phase === "shake" ? 46 : 40);
+      if(fsp.handling === "let-run" && ft.phase === "run") load *= 1.25;   /* clamping a runner costs */
+      ft.tension += load * dt * stamF + load * dt * 0.35;
+    } else if(reeling){ ft.tension += 3.5 * dt; }
+    else { ft.tension -= 30 * dt; }
+    ft.tension = Math.max(0, Math.min(100, ft.tension));
+    ft.progress = Math.max(0, Math.min(100, ft.progress));
+    if(ft.tension >= 100){ ft.snapT += dt; if(ft.snapT > 0.6){ escape("LINE SNAPPED — TOO MUCH PRESSURE ON THE " + fsp.name.toUpperCase() + "."); drawScene(); requestAnimationFrame(frame); return; } }
+    else ft.snapT = Math.max(0, ft.snapT - dt);
+    meter("fTension", null, ft.tension);
+    meter("fProgress", null, ft.progress);
+    if(ft.progress >= 100){ landFish(fsp); drawScene(); requestAnimationFrame(frame); return; }
+  }
+  else if(G.state === "escape"){
+    G.escT += dt;
+    if(G.escT > 1.8){ G.state = "idle"; G.fish = null;
+      document.getElementById("btnAction").textContent = "CAST";
+      setStatus("THE WATER SETTLES."); setHint(""); showMeters(); renderHUD(); }
+  }
+  drawScene();
+  requestAnimationFrame(frame);
+}
+
+/* ---- scene ---- */
+function drawLure(x, lure, t){
+  var bob = Math.sin(t / 240) * 2;
+  x.save(); x.translate(0, bob * 0.4);
+  x.strokeStyle = "rgba(230,240,235,0.5)"; x.lineWidth = 1;
+  switch(lure.kind){
+    case "beetle":
+      x.fillStyle = "#2c2c34"; x.beginPath(); x.ellipse(0, 0, 9, 6, 0, 0, Math.PI * 2); x.fill();
+      x.fillStyle = "#e8c85a"; x.beginPath(); x.arc(6, -3, 3, 0, Math.PI * 2); x.fill();
+      x.save(); x.translate(-11, 0); x.rotate(t / 60);
+      x.fillStyle = "rgba(220,228,235,0.85)"; x.fillRect(-1.5, -8, 3, 16); x.restore(); break;
+    case "longbody":
+      x.fillStyle = "#b8c4cc"; x.beginPath(); x.ellipse(0, 0, 13, 4, 0, 0, Math.PI * 2); x.fill();
+      x.fillStyle = "#3a6a8a"; x.fillRect(-13, -4, 26, 3);
+      x.fillStyle = "#0c0f0a"; x.beginPath(); x.arc(8, -1, 1.6, 0, Math.PI * 2); x.fill(); break;
+    case "tube":
+      x.fillStyle = "#6a7a4a"; x.fillRect(-4, -9, 8, 13);
+      x.strokeStyle = "#6a7a4a"; x.lineWidth = 2;
+      for(var i = -2; i <= 2; i++){ x.beginPath(); x.moveTo(i * 3, 4); x.quadraticCurveTo(i * 4, 10, i * 5, 13 + Math.sin(t / 200 + i) * 2); x.stroke(); } break;
+    case "spinner":
+      x.save(); x.rotate(t / 50); x.fillStyle = "rgba(232,200,90,0.9)";
+      x.beginPath(); x.ellipse(0, -7, 3, 7, 0, 0, Math.PI * 2); x.fill(); x.restore();
+      x.fillStyle = "#c44a3a"; x.beginPath(); x.arc(0, 5, 3.4, 0, Math.PI * 2); x.fill();
+      x.fillStyle = "#e8c85a"; x.beginPath(); x.arc(0, 10, 2.4, 0, Math.PI * 2); x.fill(); break;
+    case "shadrap":
+      x.fillStyle = "#7a8a99"; x.beginPath(); x.ellipse(0, 0, 11, 5, 0, 0, Math.PI * 2); x.fill();
+      x.fillStyle = "#2c3e50"; x.fillRect(-11, -5, 22, 3.4);
+      x.fillStyle = "rgba(200,215,225,0.7)"; x.beginPath(); x.ellipse(12, 3, 4, 2, 0.5, 0, Math.PI * 2); x.fill(); break;
+    case "minnow":
+      x.fillStyle = "#c8cfc4"; x.beginPath(); x.ellipse(0, 0, 8, 3, 0, 0, Math.PI * 2); x.fill();
+      x.fillStyle = "#0c0f0a"; x.beginPath(); x.arc(5, -1, 1.3, 0, Math.PI * 2); x.fill(); break;
+    case "dardevle": case "spoon":
+      x.save(); x.rotate(Math.sin(t / 170) * 0.7);
+      x.fillStyle = lure.kind === "dardevle" ? "#c43a2e" : "#d8dce2";
+      x.beginPath(); x.ellipse(0, 0, 4.5, 11, 0, 0, Math.PI * 2); x.fill();
+      if(lure.kind === "dardevle"){ x.fillStyle = "#f0ead8"; x.fillRect(-4.5, -3, 9, 5); }
+      x.restore(); break;
+    case "plug":
+      x.fillStyle = "#c9862e"; x.beginPath(); x.ellipse(0, 0, 12, 5.5, Math.sin(t / 150) * 0.18, 0, Math.PI * 2); x.fill();
+      x.fillStyle = "#5c3a14"; x.beginPath(); x.arc(7, -1, 1.8, 0, Math.PI * 2); x.fill(); break;
+    case "bucktail":
+      x.fillStyle = "#8a8f96"; x.beginPath(); x.arc(-8, 0, 4.5, 0, Math.PI * 2); x.fill();
+      x.strokeStyle = "#a83a32"; x.lineWidth = 2.4;
+      for(var j = -2; j <= 2; j++){ x.beginPath(); x.moveTo(-4, j * 1.6);
+        x.quadraticCurveTo(6, j * 2.4 + Math.sin(t / 160 + j) * 2, 15, j * 3); x.stroke(); } break;
+    case "squid":
+      x.fillStyle = "#c45a8a"; x.beginPath(); x.moveTo(-9, -6); x.lineTo(3, 0); x.lineTo(-9, 6); x.closePath(); x.fill();
+      x.strokeStyle = "#d87aa5"; x.lineWidth = 2;
+      for(var k = -2; k <= 2; k++){ x.beginPath(); x.moveTo(-8, k * 2.4);
+        x.quadraticCurveTo(-16, k * 3 + Math.sin(t / 140 + k) * 3, -22, k * 3.4); x.stroke(); } break;
+  }
+  x.restore();
+  if(lure.kind === "minnow"){  /* the bobber rides the surface */
+    x.fillStyle = "#e8e8e8"; x.beginPath(); x.arc(G.lureX, SURF - 4, 5, Math.PI, 0); x.fill();
+    x.fillStyle = "#c43a2e"; x.beginPath(); x.arc(G.lureX, SURF - 4, 5, 0, Math.PI); x.fill();
+  }
+}
+function drawScene(){
+  if(!document.getElementById("scrWater").classList.contains("on")) return;
+  var sp = G.sp, t = G.t;
+  var sky = cx.createLinearGradient(0, 0, 0, SURF);
+  sky.addColorStop(0, sp.sky[0]); sky.addColorStop(1, sp.sky[1]);
+  cx.fillStyle = sky; cx.fillRect(0, 0, W, SURF);
+  var wat = cx.createLinearGradient(0, SURF, 0, H);
+  wat.addColorStop(0, sp.water[0]); wat.addColorStop(1, sp.water[1]);
+  cx.fillStyle = wat; cx.fillRect(0, SURF, W, H - SURF);
+  /* the target's holding band, drawn as the zone */
+  cx.fillStyle = "rgba(232,200,90,0.07)";
+  var b0 = SURF + sp.band[0] * (H - SURF - 26), b1 = SURF + sp.band[1] * (H - SURF - 26);
+  cx.fillRect(0, b0, W, b1 - b0);
+  cx.fillStyle = "rgba(232,200,90,0.5)"; cx.font = "10px monospace";
+  cx.fillText("THE ZONE — " + sp.name.toUpperCase() + " HOLDS HERE", 10, b0 + 13);
+  /* weeds */
+  cx.strokeStyle = sp.weed; cx.lineWidth = 3;
+  for(var i = 0; i < 26; i++){
+    var wx = (i * 67) % W + 12, wh = 22 + ((i * 37) % 30);
+    cx.beginPath(); cx.moveTo(wx, H);
+    cx.quadraticCurveTo(wx + Math.sin(t / 700 + i) * 5, H - wh * 0.6, wx + Math.sin(t / 700 + i + 1) * 7, H - wh); cx.stroke();
+  }
+  /* boat + rod */
+  cx.fillStyle = "#14231a"; cx.fillRect(724, SURF - 16, 76, 16);
+  cx.fillRect(742, SURF - 30, 8, 16);
+  cx.strokeStyle = "#0e1710"; cx.lineWidth = 3;
+  cx.beginPath(); cx.moveTo(746, SURF - 28); cx.lineTo(668, SURF - 64); cx.stroke();
+  /* the fish */
+  if(G.fish && (G.state === "retrieve" || G.state === "bite")){
+    var f = G.fish, fy = SURF + f.depth * (H - SURF - 26);
+    cx.save(); cx.globalAlpha = f.mode === "refuse" ? 0.9 : 0.78;
+    cx.translate(f.x, fy + Math.sin(f.wob * 2) * 3);
+    var dir = (G.lureX - f.x) >= 0 ? 1 : -1;
+    if(G.state === "bite") dir = (726 - f.x) >= 0 ? 1 : -1;
+    drawBody(cx, f.sp, 64 + f.sp.lenMax * 1.1, 0, dir, G.state === "bite" ? 0.7 : 0.15);
+    cx.restore();
+  }
+  if(G.state === "fight" && G.fight){
+    var ft = G.fight, fx = 330 + Math.sin(ft.t / 300) * 60, fy2 = SURF + 130 + Math.sin(ft.t / 433) * 26;
+    if(ft.phase === "jump") fy2 = SURF - 26 - Math.abs(Math.sin(ft.t / 160)) * 34;
+    if(ft.phase === "dive") fy2 = H - 60;
+    if(ft.phase === "rest") fy2 = SURF + 170;
+    cx.save(); cx.translate(fx, fy2);
+    if(ft.phase === "jump") cx.rotate(-0.5);
+    drawBody(cx, ft.sp, 120 + ft.sp.lenMax * 1.6, 0, 1, ft.phase === "shake" ? 0.5 : 0.1);
+    cx.restore();
+    cx.strokeStyle = "rgba(235,242,238,0.75)"; cx.lineWidth = 1.4;
+    cx.beginPath(); cx.moveTo(672, SURF - 60); cx.quadraticCurveTo((672 + fx) / 2, Math.min(fy2, SURF) - 10 - ft.tension * 0.2, fx + 40, fy2); cx.stroke();
+  }
+  /* lure + line */
+  if(G.state === "retrieve" || G.state === "bite"){
+    cx.strokeStyle = "rgba(235,242,238,0.55)"; cx.lineWidth = 1.2;
+    cx.beginPath(); cx.moveTo(672, SURF - 60); cx.lineTo(G.lureX, G.lureY); cx.stroke();
+    cx.save(); cx.translate(G.lureX, G.lureY); drawLure(cx, selLure, t); cx.restore();
+  }
+  if(G.state === "power"){
+    cx.fillStyle = "rgba(10,20,15,0.65)"; cx.fillRect(240, 12, 320, 22);
+    cx.fillStyle = "#e8c85a"; cx.fillRect(244, 16, G.power / 100 * 312, 14);
+    cx.fillStyle = "#eaf6ef"; cx.font = "12px monospace"; cx.fillText("CAST POWER — PRESS AGAIN TO LET IT FLY", 246, 52);
+  }
+  cx.fillStyle = "rgba(255,255,255,0.5)";
+  cx.beginPath(); cx.ellipse(400, SURF, 420, 3, 0, 0, Math.PI * 2); cx.fill();
+}
+
+/* =====================================================================
+   THE LANDING — memory first, then the mount, and the mount is a
+   CHARACTER. Presentations rotate; the fish sometimes turns, faces
+   you, and sings. Personal bests and ladder-clearing catches get
+   the song guaranteed — the big moments earn the Billy beat.
+   ===================================================================== */
+var lastCatch = null, lastFlags = null, mountPres = "", singState = { active: false, mouth: 0 };
+var PRESENTATIONS = ["BROADSIDE CLASSIC", "THE WALL TROPHY", "LEAPER FREEZE", "HEAD-ON HELLO"];
+function landFish(sp){
+  var seed = (G.nextSeed != null) ? G.nextSeed : ((Date.now() & 0xffffff) ^ (catchLog.length * 7919));
+  G.nextSeed = null;
+  var c = rollCatch(sp, seed);
+  var prevBest = personalBest(sp.slug);
+  var isPB = !!prevBest && c.lbs > prevBest.lbs;
+  var sameTwice = catchLog.some(function(p){ return p.slug === sp.slug && p.lbs === c.lbs; });
+  /* the log remembers every catch */
+  catchLog.push({ slug: c.slug, len: c.len, lbs: c.lbs, age: c.age, when: c.when });
+  saveJSON(LOG_KEY, catchLog);
+  /* the board takes it in the faces' own shape */
+  var board = loadJSON(BOARD_KEY, []);
+  board.push({ slug: c.slug, fish: c.fish, len: c.len, unit: c.unit, lbs: c.lbs, age: c.age, seed: c.seed, when: c.when });
+  saveJSON(BOARD_KEY, board);
+  /* ladder progress */
+  var cleared = false, ladderDone = false;
+  if(sp.slug === SPECIES[G.level].slug){
+    prog.targetCaught[sp.slug] = (prog.targetCaught[sp.slug] || 0) + 1;
+    if(prog.targetCaught[sp.slug] >= goalFor(G.level) && prog.unlocked < G.level + 2){
+      prog.unlocked = Math.min(SPECIES.length, G.level + 2); cleared = true;
+    }
+    if(G.level === SPECIES.length - 1 && prog.targetCaught[sp.slug] >= goalFor(G.level)){
+      prog.done = true; ladderDone = true;
+    }
+  }
+  prog.totalCatches++;
+  /* presentation: never the same twice in a row; the song is a
+     sometimes-event — except when the moment has earned it */
+  var pres;
+  if(ladderDone || (isPB && Math.random() < 0.6) || Math.random() < 0.26) pres = "THE SINGING BILLY";
+  else {
+    var opts = PRESENTATIONS.filter(function(p){ return p !== prog.lastPres; });
+    pres = opts[Math.floor(Math.random() * opts.length)];
+  }
+  prog.lastPres = pres; saveJSON(PROG_KEY, prog);
+  lastCatch = c; mountPres = pres;
+  lastFlags = { isPB: isPB, prevBest: prevBest, sameTwice: sameTwice, cleared: cleared, ladderDone: ladderDone };
+  G.state = "idle"; G.fight = null; G.fish = null;
+  showMeters();
+  openCatch();
+}
+function openCatch(){
+  var c = lastCatch, sp = BY_SLUG[c.slug];
+  document.getElementById("catchPres").textContent = mountPres;
+  document.getElementById("catchTitle").textContent = c.fish.toUpperCase();
+  document.getElementById("catchLine").textContent =
+    c.len.toFixed(1) + " " + c.unit + " · " + c.lbs.toFixed(1) + " LB" +
+    (c.age === "old" ? " · OLD GROWTH" : c.age === "dinosaur" ? " · DINOSAUR" : c.age === "young" ? " · YOUNG" : "");
+  var fl = [];
+  if(lastFlags.isPB) fl.push("★ NEW PERSONAL BEST — BEATS " + lastFlags.prevBest.lbs.toFixed(1) + " LB");
+  if(lastFlags.sameTwice) fl.push("<span class='same'>SAME SIZE TWICE — " + c.lbs.toFixed(1) + " LB, JUST LIKE ONE YOU ALREADY HAD</span>");
+  if(lastFlags.cleared) fl.push("★ RUNG CLEARED — THE NEXT FISH OPENS");
+  if(lastFlags.ladderDone) fl.push("★ THE CROWN IS LANDED — LADDER COMPLETE");
+  document.getElementById("catchFlags").innerHTML = fl.join("<br>");
+  document.getElementById("btnAgain").textContent = lastFlags.ladderDone ? "SEE THE SUMMATION →" : "FISH AGAIN →";
+  show("scrCatch");
+  singState.active = false; singState.mouth = 0;
+  if(mountPres === "THE SINGING BILLY") startSing();
+  drawMount();
+}
+function startSing(){
+  if(!lastCatch) return;
+  mountPres = "THE SINGING BILLY";
+  document.getElementById("catchPres").textContent = mountPres;
+  singState.active = true;
+  var dur = playJingle(lastCatch.slug, function(i){
+    singState.mouth = 1;
+    setTimeout(function(){ singState.mouth = 0.25; }, 110);
+  });
+  if(!dur){ /* no audio available: the song still plays, silently */
+    var j = JINGLES[lastCatch.slug], n = 0;
+    var iv = setInterval(function(){
+      singState.mouth = 1; setTimeout(function(){ singState.mouth = 0.25; }, 110);
+      if(++n >= j.notes.length){ clearInterval(iv); singState.active = false; }
+    }, j.ms);
+  }
+  setTimeout(function(){ singState.active = false; singState.mouth = 0.15; }, (dur || 1600) + 250);
+}
+document.getElementById("btnSing").addEventListener("click", function(){ startSing(); });
+document.getElementById("btnAgain").addEventListener("click", function(){
+  stopSing();
+  if(lastFlags && lastFlags.ladderDone){ renderDone(); show("scrDone"); }
+  else startWater(G.level);
+});
+
+/* ---- mount rendering (runs inside the main rAF) ---- */
+var noteFx = [];
+function drawMount(){
+  if(!document.getElementById("scrCatch").classList.contains("on") || !lastCatch) return;
+  var mcv = document.getElementById("mountStage"), x = mcv.getContext("2d");
+  var c = lastCatch, sp = BY_SLUG[c.slug], t = G.t;
+  x.clearRect(0, 0, 560, 380);
+  x.fillStyle = "#0d1a12"; x.fillRect(0, 0, 560, 380);
+  var singing = mountPres === "THE SINGING BILLY";
+  if(singing && singState.active && Math.random() < 0.3)
+    noteFx.push({ x: 300 + Math.random() * 60, y: 130, t: 0 });
+  noteFx = noteFx.filter(function(n){ return n.t < 60; });
+  if(mountPres === "LEAPER FREEZE"){
+    var wg = x.createLinearGradient(0, 240, 0, 380);
+    wg.addColorStop(0, sp.water[0]); wg.addColorStop(1, sp.water[1]);
+    x.fillStyle = wg; x.fillRect(0, 240, 560, 140);
+    x.save(); x.translate(280, 190); x.rotate(-0.45);
+    drawBody(x, sp, 250, c.hueJ, 1, 0.3); x.restore();
+    x.fillStyle = "rgba(230,244,250,0.8)";
+    for(var i = 0; i < 14; i++){ x.beginPath(); x.arc(180 + (i * 53) % 220, 250 + (i * 29) % 40, 2.4, 0, Math.PI * 2); x.fill(); }
+  } else if(mountPres === "HEAD-ON HELLO" || singing){
+    x.fillStyle = "#4a3418"; x.beginPath(); x.arc(280, 180, 128, 0, Math.PI * 2); x.fill();
+    x.fillStyle = "#5f4520"; x.beginPath(); x.arc(280, 180, 116, 0, Math.PI * 2); x.fill();
+    x.save(); x.translate(280, 185);
+    var mouth = singing ? (0.25 + singState.mouth * 0.75) : 0.18 + Math.sin(t / 600) * 0.08;
+    drawFront(x, sp, 150, mouth, t);
+    x.restore();
+  } else {
+    /* plaque presentations */
+    x.fillStyle = "#4a3418"; roundRect(x, 60, 60, 440, 240, 14); x.fill();
+    x.fillStyle = "#5f4520"; roundRect(x, 72, 72, 416, 216, 10); x.fill();
+    if(mountPres === "THE WALL TROPHY"){
+      x.fillStyle = "#2c1e0c"; x.fillRect(150, 92, 10, 26); x.fillRect(400, 92, 10, 26);
+    }
+    x.save(); x.translate(280, 168);
+    drawBody(x, sp, mountPres === "THE WALL TROPHY" ? 235 : 265, c.hueJ, 1, 0.08 + Math.sin(t / 700) * 0.03);
+    x.restore();
+    x.fillStyle = "#e8c85a"; roundRect(x, 180, 246, 200, 30, 5); x.fill();
+    x.fillStyle = "#14240f"; x.font = "bold 12px monospace"; x.textAlign = "center";
+    x.fillText(c.fish.toUpperCase() + " · " + c.lbs.toFixed(1) + " LB", 280, 265);
+    x.textAlign = "left";
+  }
+  noteFx.forEach(function(n){
+    n.t++; n.y -= 1.1;
+    x.fillStyle = "rgba(232,200,90," + (1 - n.t / 60) + ")";
+    x.font = "20px monospace"; x.fillText("♪", n.x, n.y);
+  });
+}
+function roundRect(x, a, b, w, h, r){
+  x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r);
+  x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath();
+}
+
+/* ---- summation ---- */
+function renderDone(){
+  var el = document.getElementById("doneBody");
+  var rows = SPECIES.map(function(sp){
+    var pb = personalBest(sp.slug);
+    return "<tr><td>" + sp.name + "</td><td>" + catchesOf(sp.slug) + "</td><td>" +
+      (pb ? pb.lbs.toFixed(1) + " LB" : "—") + "</td></tr>";
+  }).join("");
+  var twice = 0; var seen = {};
+  catchLog.forEach(function(c){ var k = c.slug + "|" + c.lbs; if(seen[k]) twice++; seen[k] = 1; });
+  el.innerHTML = "<table class='sum'><tr><th>SPECIES</th><th>LANDED</th><th>PERSONAL BEST</th></tr>" + rows + "</table>" +
+    "<p style='margin-top:14px;line-height:1.7;font-size:14px'>Total catches on the log: <span class='gold'>" + catchLog.length +
+    "</span><br>Same-size-twice moments the water handed you: <span class='gold'>" + twice + "</span><br>" +
+    "Every one of them is on the house board, next to the marks that were standing.</p>";
+}
+
+/* =====================================================================
+   INPUT — one action button, worked three ways: press to cast,
+   press again to fly, HOLD to reel, tap to set the hook. Space does
+   the same. Cadence is read off the holds and releases.
+   ===================================================================== */
+var btnA = document.getElementById("btnAction");
+function pressDown(){
+  audio();
+  if(G.state === "idle"){ G.state = "power"; G.power = 0; G.powerDir = 1; btnA.textContent = "LET IT FLY!"; }
+  else if(G.state === "power"){ castOut(); }
+  else if(G.state === "bite"){ hooksetAttempt(); }
+  else if(G.state === "retrieve" || G.state === "fight"){ G.reeling = true; }
+}
+function pressUp(){ G.reeling = false; }
+btnA.addEventListener("pointerdown", function(e){ e.preventDefault(); pressDown(); });
+btnA.addEventListener("pointerup", pressUp);
+btnA.addEventListener("pointerleave", pressUp);
+btnA.addEventListener("pointercancel", pressUp);
+document.addEventListener("keydown", function(e){
+  if(e.code === "Space" && !e.repeat && document.getElementById("scrWater").classList.contains("on")){
+    e.preventDefault(); pressDown();
+  }
+});
+document.addEventListener("keyup", function(e){ if(e.code === "Space") pressUp(); });
+document.getElementById("btnBack").addEventListener("click", function(){
+  G.state = "idle"; G.fish = null; G.fight = null; renderMap(); show("scrMap");
+});
+
+/* main loop also animates the mount */
+var _frame = frame;
+frame = function(ts){ _frame(ts); drawMount(); };
+
+/* ---- bench hooks (house play-bench pattern: the bench drives the
+   game the way the brickwall bench drives the paddle) ---- */
+window.__LADDER__ = {
+  version: "1.0",
+  state: function(){ return G.state; },
+  prog: function(){ return prog; },
+  log: function(){ return catchLog; },
+  board: function(){ return loadJSON(BOARD_KEY, []); },
+  startLevel: function(i){ startWater(i); },
+  cast: function(){ if(G.state === "idle"){ G.state = "power"; G.power = 55; castOut(); } },
+  forceFish: function(slug){
+    if(G.state !== "retrieve") this.cast();
+    var sp = BY_SLUG[slug];
+    G.fish = { sp: sp, x: G.lureX - 30, depth: (sp.band[0] + sp.band[1]) / 2,
+               interest: 96, mode: "follow", known: true, refuseT: 0, dir: 1, wob: 0 };
+    selLure = favoredLures(slug)[0] || selLure;
+    G.lureDepth = G.fish.depth;
+    return true;
+  },
+  setReeling: function(b){ G.autoReel = !!b; },
+  hook: function(){ hooksetAttempt(); },
+  fightProgress: function(){ return G.fight ? G.fight.progress : -1; },
+  setFightProgress: function(v){ if(G.fight) G.fight.progress = v; },
+  lastCatch: function(){ return lastCatch; },
+  seedNext: function(s){ G.nextSeed = s; },
+  flags: function(){ return lastFlags; },
+  presentation: function(){ return mountPres; },
+  sing: function(){ startSing(); return singState.active; }
+};
+
+/* ---- init ---- */
+renderMap();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
